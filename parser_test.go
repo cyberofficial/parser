@@ -1,0 +1,127 @@
+package parser
+
+import (
+	"testing"
+)
+
+// Define example structs
+type User struct {
+	ID        int
+	Name      string
+	Email     string
+	IsActive  bool
+	Age       int
+	Balance   float64
+	Address   AddressInfo
+	Contact   *ContactInfo // Pointer to demonstrate nil handling
+	Interests []string
+}
+
+type AddressInfo struct {
+	Street string
+	City   string
+	Zip    string
+}
+
+type ContactInfo struct {
+	Phone string
+	Email string
+}
+
+type test struct {
+	query  string
+	expRes int
+}
+
+func Test_main(t *testing.T) {
+	users := []User{
+		{ID: 1, Name: "Alice", Email: "alice@example.com", IsActive: true, Age: 30, Balance: 100.50, Address: AddressInfo{Street: "123 Main St", City: "Anytown", Zip: "12345"}, Contact: &ContactInfo{Phone: "111-222-3333"}},
+		{ID: 2, Name: "Bob", Email: "bob@example.com", IsActive: false, Age: 25, Balance: 50.25, Address: AddressInfo{Street: "456 Oak Ave", City: "Anytown", Zip: "12345"}, Contact: &ContactInfo{Phone: ""}}, // Empty phone
+		{ID: 3, Name: "Charlie", Email: "charlie@example.com", IsActive: true, Age: 35, Balance: 200.75, Address: AddressInfo{Street: "789 Pine Ln", City: "Otherville", Zip: "67890"}, Contact: nil},          // Nil contact
+		{ID: 4, Name: "David", Email: "david@example.com", IsActive: true, Age: 28, Balance: 15.00, Address: AddressInfo{Street: "101 Elm Rd", City: "Anytown", Zip: "12345"}, Contact: &ContactInfo{Phone: "999-888-7777"}},
+		{ID: 5, Name: "Eve", Email: "eve@example.com", IsActive: false, Age: 40, Balance: 120.00, Address: AddressInfo{Street: "202 Birch Blvd", City: "Otherville", Zip: "67890"}, Contact: &ContactInfo{Phone: "555-123-4567"}},
+	}
+
+	tm := make(map[int]test)
+	tm[0] = test{
+		query:  `ID = 1`,
+		expRes: 1,
+	}
+	tm[1] = test{
+		query:  `Name = 'Bob'`,
+		expRes: 1,
+	}
+	tm[2] = test{
+		query:  `Age > 30`,
+		expRes: 2,
+	}
+	tm[3] = test{
+		query:  `Balance < 100`,
+		expRes: 2,
+	}
+	tm[4] = test{
+		query:  `IsActive = true`,
+		expRes: 3,
+	}
+	tm[5] = test{
+		query:  `ID = 1 AND IsActive = true`,
+		expRes: 1,
+	}
+	tm[6] = test{
+		query:  `Age > 25 AND Balance > 100`,
+		expRes: 3,
+	}
+	tm[7] = test{
+		query:  `Address.City = 'Anytown'`,
+		expRes: 3,
+	}
+	tm[8] = test{
+		query:  `Address.Street = '123 Main St' AND Address.Zip = '12345'`,
+		expRes: 1,
+	}
+	tm[9] = test{
+		query:  `Contact.Phone != ''`,
+		expRes: 3,
+	}
+	tm[10] = test{
+		query:  `Contact.Phone = '111-222-3333' AND ID = 1`,
+		expRes: 1,
+	}
+	tm[11] = test{
+		query:  `Contact.Phone = ''`,
+		expRes: 1,
+	}
+	tm[12] = test{
+		query:  `Name != 'Charlie' AND Age < 30`,
+		expRes: 2,
+	}
+	tm[13] = test{
+		query:  `Age > 20 AND Age < 30`,
+		expRes: 2,
+	}
+	tm[14] = test{
+		query:  `Balance > 15.00 AND Balance < 100.00`,
+		expRes: 1,
+	}
+	tm[15] = test{
+		query:  `NonExistentField = 'test'`,
+		expRes: 0,
+	}
+
+	for _, q := range tm {
+		t.Logf("Query: %s\n", q.query)
+		filteredUsers, err := Parse(q.query, users)
+		if err != nil {
+			t.Fatalf("  Error: %v\n", err)
+			continue
+		}
+		if len(filteredUsers) != q.expRes {
+			t.Fatalf("expected %d but got %d", q.expRes, len(filteredUsers))
+		} else {
+			for _, user := range filteredUsers {
+				t.Logf("  - %+v\n", user)
+			}
+		}
+		t.Log("---")
+	}
+}
