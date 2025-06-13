@@ -93,6 +93,44 @@ func (ce *ComparisonExpression) Evaluate(item reflect.Value) (bool, error) {
 		return false, nil
 	}
 
+	// Handle slice values
+	if fieldValue.Kind() == reflect.Slice {
+		for i := 0; i < fieldValue.Len(); i++ {
+			elem := fieldValue.Index(i)
+			// If slice of pointers, dereference
+			if elem.Kind() == reflect.Ptr && !elem.IsNil() {
+				elem = elem.Elem()
+			}
+			// If comparing to a field of struct (e.g., Tags.Name)
+			if elem.Kind() == reflect.Struct && strings.Contains(ce.Field, ".") {
+				// Remove the slice field from ce.Field
+				parts := strings.SplitN(ce.Field, ".", 2)
+				if len(parts) == 2 {
+					subField := parts[1]
+					subExpr := &ComparisonExpression{Field: subField, Operator: ce.Operator, Value: ce.Value}
+					match, _ := subExpr.Evaluate(elem)
+					if match {
+						return true, nil
+					}
+				}
+			} else {
+				// Compare element directly (e.g., Interests = 'music')
+				cmpExpr := &ComparisonExpression{Operator: ce.Operator, Value: ce.Value}
+				// Set Field to empty so getFieldValue returns elem
+				match, _ := cmpExpr.compareValue(elem)
+				if match {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	}
+
+	return ce.compareValue(fieldValue)
+}
+
+// compareValue handles the actual comparison for a single value
+func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, error) {
 	if fieldValue.Kind() == reflect.Ptr && fieldValue.IsNil() {
 		fieldValue = reflect.Zero(fieldValue.Type().Elem())
 	}
@@ -327,6 +365,15 @@ func getFieldValue(item reflect.Value, fieldPath string) (reflect.Value, error) 
 				return reflect.Value{}, fmt.Errorf("nil pointer at path %q", strings.Join(parts[:i+1], "."))
 			}
 			currentValue = currentValue.Elem()
+		}
+
+		if currentValue.Kind() == reflect.Slice {
+			// If this is the last part, return the slice
+			if i == len(parts)-1 {
+				return currentValue, nil
+			}
+			// Otherwise, we want to access a field of each element in the slice
+			return currentValue, nil // Let Evaluate handle the rest
 		}
 
 		if currentValue.Kind() != reflect.Struct {

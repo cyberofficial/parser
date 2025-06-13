@@ -214,3 +214,45 @@ func Test_parser_order(t *testing.T) {
 		}
 	}
 }
+
+// --- Slice of struct for testing ---
+type Tag struct {
+	Name  string
+	Value string
+}
+
+type BlogPost struct {
+	Title   string
+	Tags    []Tag
+	Authors []string
+}
+
+func Test_parser_slice_fields(t *testing.T) {
+	posts := []BlogPost{
+		{Title: "Go Reflection", Tags: []Tag{{Name: "go", Value: "lang"}, {Name: "reflection", Value: "feature"}}, Authors: []string{"Alice", "Bob"}},
+		{Title: "Python Tips", Tags: []Tag{{Name: "python", Value: "lang"}}, Authors: []string{"Carol"}},
+		{Title: "Music Review", Tags: []Tag{{Name: "music", Value: "art"}}, Authors: []string{"Dave", "Eve"}},
+	}
+	tests := []struct {
+		query  string
+		expRes int
+	}{
+		{"Tags.Name = 'go'", 1},
+		{"Tags.Value = 'lang'", 2},
+		{"Tags.Name = 'music'", 1},
+		{"Authors = 'Alice'", 1},
+		{"Authors = 'Eve'", 1},
+		{"Tags.Name = 'reflection' AND Authors = 'Bob'", 1},
+		{"Tags.Name = 'notfound'", 0},
+	}
+	for _, tc := range tests {
+		t.Logf("BlogPost Query: %s", tc.query)
+		filtered, err := Parse(tc.query, posts)
+		if err != nil {
+			t.Fatalf("  Error: %v", err)
+		}
+		if len(filtered) != tc.expRes {
+			t.Fatalf("expected %d but got %d", tc.expRes, len(filtered))
+		}
+	}
+}
