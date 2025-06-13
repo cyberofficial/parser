@@ -244,6 +244,15 @@ func Test_parser_slice_fields(t *testing.T) {
 		{"Authors = 'Eve'", 1},
 		{"Tags.Name = 'reflection' AND Authors = 'Bob'", 1},
 		{"Tags.Name = 'notfound'", 0},
+		{
+			"Authors CONTAINS 'Alice'", 1,
+		},
+		{
+			"Authors CONTAINS 'Eve'", 1,
+		},
+		{
+			"Tags.Name CONTAINS 'reflection' AND Authors CONTAINS 'Bob'", 1,
+		},
 	}
 	for _, tc := range tests {
 		t.Logf("BlogPost Query: %s", tc.query)

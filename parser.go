@@ -20,11 +20,12 @@ const (
 	NUMBER     TokenType = "NUMBER"
 
 	// Operators
-	EQ  TokenType = "EQ"  // =
-	NE  TokenType = "NE"  // !=
-	LT  TokenType = "LT"  // <
-	GT  TokenType = "GT"  // >
-	AND TokenType = "AND" // AND
+	EQ       TokenType = "EQ"       // =
+	NE       TokenType = "NE"       // !=
+	LT       TokenType = "LT"       // <
+	GT       TokenType = "GT"       // >
+	AND      TokenType = "AND"      // AND
+	CONTAINS TokenType = "CONTAINS" // CONTAINS
 )
 
 type Token struct {
@@ -95,6 +96,33 @@ func (ce *ComparisonExpression) Evaluate(item reflect.Value) (bool, error) {
 
 	// Handle slice values
 	if fieldValue.Kind() == reflect.Slice {
+		if ce.Operator == CONTAINS {
+			for i := 0; i < fieldValue.Len(); i++ {
+				elem := fieldValue.Index(i)
+				if elem.Kind() == reflect.Ptr && !elem.IsNil() {
+					elem = elem.Elem()
+				}
+				if elem.Kind() == reflect.Struct && strings.Contains(ce.Field, ".") {
+					// Remove the slice field from ce.Field
+					parts := strings.SplitN(ce.Field, ".", 2)
+					if len(parts) == 2 {
+						subField := parts[1]
+						subExpr := &ComparisonExpression{Field: subField, Operator: EQ, Value: ce.Value}
+						match, _ := subExpr.Evaluate(elem)
+						if match {
+							return true, nil
+						}
+					}
+				} else {
+					cmpExpr := &ComparisonExpression{Operator: EQ, Value: ce.Value}
+					match, _ := cmpExpr.compareValue(elem)
+					if match {
+						return true, nil
+					}
+				}
+			}
+			return false, nil
+		}
 		for i := 0; i < fieldValue.Len(); i++ {
 			elem := fieldValue.Index(i)
 			// If slice of pointers, dereference
@@ -462,11 +490,14 @@ func (p *Parser) parseComparison() (*ComparisonExpression, error) {
 
 	p.nextToken()
 
+	// Debug output for parseComparison
+	fmt.Printf("DEBUG: parseComparison: Field=%s, OperatorToken=%s, OperatorLiteral=%s\n", expr.Field, p.currentToken.Type, p.currentToken.Literal)
+
 	switch p.currentToken.Type {
-	case EQ, NE, LT, GT:
+	case EQ, NE, LT, GT, CONTAINS:
 		expr.Operator = p.currentToken.Type
 	default:
-		return nil, fmt.Errorf("expected operator (=, !=, <, >), got %s (%q)", p.currentToken.Type, p.currentToken.Literal)
+		return nil, fmt.Errorf("expected operator (=, !=, <, >, CONTAINS), got %s (%q)", p.currentToken.Type, p.currentToken.Literal)
 	}
 
 	p.nextToken()
@@ -535,7 +566,8 @@ func (l *Lexer) NextToken() Token {
 	default:
 		if isLetter(l.ch) {
 			tok.Literal = l.readIdentifier()
-			tok.Type = LookupIdentifier(tok.Literal)
+			typeFromIdent := LookupIdentifier(tok.Literal)
+			tok.Type = typeFromIdent
 			return tok
 		} else if isDigit(l.ch) {
 			tok.Type = NUMBER
@@ -608,6 +640,8 @@ func LookupIdentifier(identifier string) TokenType {
 	switch strings.ToUpper(identifier) { // Case-insensitive for keywords
 	case "AND":
 		return AND
+	case "CONTAINS":
+		return CONTAINS
 	default:
 		return IDENTIFIER
 	}
