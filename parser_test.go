@@ -125,3 +125,92 @@ func Test_main(t *testing.T) {
 		t.Log("---")
 	}
 }
+
+// Additional struct types and parser tests
+
+type Product struct {
+	SKU      string
+	Name     string
+	Price    float64
+	InStock  bool
+	Category CategoryInfo
+}
+
+type CategoryInfo struct {
+	Name string
+	ID   int
+}
+
+type Order struct {
+	OrderID   int
+	Product   Product
+	Quantity  int
+	Total     float64
+	Completed bool
+}
+
+func Test_parser_product(t *testing.T) {
+	products := []Product{
+		{SKU: "A1", Name: "Widget", Price: 19.99, InStock: true, Category: CategoryInfo{Name: "Gadgets", ID: 10}},
+		{SKU: "B2", Name: "Gizmo", Price: 29.99, InStock: false, Category: CategoryInfo{Name: "Gadgets", ID: 10}},
+		{SKU: "C3", Name: "Thingamajig", Price: 9.99, InStock: true, Category: CategoryInfo{Name: "Tools", ID: 20}},
+	}
+
+	tests := []struct {
+		query  string
+		expRes int
+	}{
+		{"Price > 10", 2},
+		{"InStock = true", 2},
+		{"Category.Name = 'Gadgets'", 2},
+		{"SKU = 'C3' AND InStock = true", 1},
+		{"Category.ID = 20", 1},
+		{"Name != 'Gizmo'", 2},
+	}
+
+	for _, tc := range tests {
+		t.Logf("Product Query: %s", tc.query)
+		filtered, err := Parse(tc.query, products)
+		if err != nil {
+			t.Fatalf("  Error: %v", err)
+		}
+		if len(filtered) != tc.expRes {
+			t.Fatalf("expected %d but got %d", tc.expRes, len(filtered))
+		}
+	}
+}
+
+func Test_parser_order(t *testing.T) {
+	products := []Product{
+		{SKU: "A1", Name: "Widget", Price: 19.99, InStock: true, Category: CategoryInfo{Name: "Gadgets", ID: 10}},
+		{SKU: "B2", Name: "Gizmo", Price: 29.99, InStock: false, Category: CategoryInfo{Name: "Gadgets", ID: 10}},
+	}
+	orders := []Order{
+		{OrderID: 100, Product: products[0], Quantity: 2, Total: 39.98, Completed: true},
+		{OrderID: 101, Product: products[1], Quantity: 1, Total: 29.99, Completed: false},
+		{OrderID: 102, Product: products[0], Quantity: 5, Total: 99.95, Completed: true},
+	}
+
+	tests := []struct {
+		query  string
+		expRes int
+	}{
+		{"Completed = true", 2},
+		{"Product.Name = 'Gizmo'", 1},
+		{"Quantity > 1 AND Completed = true", 2},
+		{"Product.Category.Name = 'Gadgets' AND Total > 50", 1},
+		{"OrderID = 101", 1},
+		{"Product.InStock = true", 2},
+	}
+
+	for _, tc := range tests {
+		t.Logf("Order Query: %s", tc.query)
+		filtered, err := Parse(tc.query, orders)
+		if err != nil {
+			t.Fatalf("  Error: %v", err)
+		}
+		if len(filtered) != tc.expRes {
+			t.Fatalf("expected %d but got %d", tc.expRes, len(filtered))
+		}
+	}
+}
