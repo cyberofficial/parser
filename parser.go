@@ -24,11 +24,16 @@ const (
 	NE       TokenType = "NE"       // !=
 	LT       TokenType = "LT"       // <
 	GT       TokenType = "GT"       // >
+	GE       TokenType = "GE"       // >=
+	LE       TokenType = "LE"       // <=
 	AND      TokenType = "AND"      // AND
 	OR       TokenType = "OR"       // OR
 	CONTAINS TokenType = "CONTAINS" // CONTAINS
 	LPAREN   TokenType = "LPAREN"   // (
 	RPAREN   TokenType = "RPAREN"   // )
+	IS       TokenType = "IS"       // IS
+	NULL     TokenType = "NULL"     // NULL
+	NOT      TokenType = "NOT"      // NOT
 )
 
 type Token struct {
@@ -66,6 +71,9 @@ func Parse[T any](query string, data []T) ([]T, error) {
 	if len(p.Errors()) > 0 {
 		return nil, fmt.Errorf("parsing errors: %s", strings.Join(p.Errors(), "; "))
 	}
+	if ast == nil {
+		return nil, fmt.Errorf("failed to parse query: AST is nil")
+	}
 
 	filteredData := []T{}
 
@@ -84,7 +92,6 @@ func Parse[T any](query string, data []T) ([]T, error) {
 
 		match, err := ast.Evaluate(val)
 		if err != nil {
-			fmt.Printf("Warning: Skipping item due to evaluation error: %v\n", err)
 			continue
 		}
 
@@ -104,7 +111,6 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 	for _, part := range parts {
 		nextValues := []reflect.Value{}
 		for _, val := range currentValues {
-			fmt.Printf("DEBUG: part=%q, val=%#v, kind=%v\n", part, val.Interface(), val.Kind())
 			if val.Kind() == reflect.Ptr {
 				if val.IsNil() {
 					continue
@@ -121,7 +127,7 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 						elem = elem.Elem()
 					}
 					if elem.Kind() == reflect.Struct {
-						field := elem.FieldByName(part)
+						field := getFieldByNameCaseInsensitive(elem, part)
 						if field.IsValid() {
 							nextValues = append(nextValues, field)
 						}
@@ -132,7 +138,7 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 				continue
 			}
 			if val.Kind() == reflect.Struct {
-				field := val.FieldByName(part)
+				field := getFieldByNameCaseInsensitive(val, part)
 				if !field.IsValid() {
 					continue
 				}
@@ -158,20 +164,29 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 			flat = append(flat, v)
 		}
 	}
-	fmt.Printf("DEBUG getFieldValues(%q): %v\n", fieldPath, flat)
 	return flat, nil
+}
+
+// getFieldByNameCaseInsensitive returns the struct field with a name matching 'name' (case-insensitive), or an invalid reflect.Value if not found
+func getFieldByNameCaseInsensitive(val reflect.Value, name string) reflect.Value {
+	typeOfVal := val.Type()
+	for i := 0; i < typeOfVal.NumField(); i++ {
+		field := typeOfVal.Field(i)
+		if strings.EqualFold(field.Name, name) {
+			return val.Field(i)
+		}
+	}
+	return reflect.Value{}
 }
 
 // The core Evaluate method for ComparisonExpression
 func (ce *ComparisonExpression) Evaluate(item reflect.Value) (bool, error) {
 	fieldValues, err := getFieldValues(item, ce.Field)
 	if err != nil || len(fieldValues) == 0 {
-		fmt.Printf("DEBUG Evaluate: field %q not found or empty\n", ce.Field)
 		return false, nil // If field is missing or not found, do not match
 	}
 	for _, fieldValue := range fieldValues {
 		match, _ := ce.compareValue(fieldValue)
-		fmt.Printf("DEBUG Compare: %v %v %q => %v\n", fieldValue, ce.Operator, ce.Value, match)
 		if match {
 			return true, nil
 		}
@@ -199,6 +214,10 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 			return s < ce.Value, nil
 		case GT:
 			return s > ce.Value, nil
+		case LE:
+			return s <= ce.Value, nil
+		case GE:
+			return s >= ce.Value, nil
 		case CONTAINS:
 			return strings.Contains(s, ce.Value), nil
 		}
@@ -222,6 +241,10 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 			return fv < v, nil
 		case GT:
 			return fv > v, nil
+		case LE:
+			return fv <= v, nil
+		case GE:
+			return fv >= v, nil
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		v, _ := strconv.ParseUint(ce.Value, 10, 64)
@@ -235,6 +258,10 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 			return fv < v, nil
 		case GT:
 			return fv > v, nil
+		case LE:
+			return fv <= v, nil
+		case GE:
+			return fv >= v, nil
 		}
 	case reflect.Float32, reflect.Float64:
 		v, _ := strconv.ParseFloat(ce.Value, 64)
@@ -248,8 +275,15 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 			return fv < v, nil
 		case GT:
 			return fv > v, nil
+		case LE:
+			return fv <= v, nil
+		case GE:
+			return fv >= v, nil
 		}
 	case reflect.Slice:
+		if fieldValue.IsNil() {
+			return false, nil
+		}
 		if ce.Operator == CONTAINS {
 			for i := 0; i < fieldValue.Len(); i++ {
 				item := fieldValue.Index(i)
@@ -267,6 +301,40 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 				}
 			}
 			return false, nil
+		} else if ce.Operator == EQ {
+			for i := 0; i < fieldValue.Len(); i++ {
+				item := fieldValue.Index(i)
+				if item.Kind() == reflect.Ptr && !item.IsNil() {
+					item = item.Elem()
+				}
+				if item.Kind() == reflect.String {
+					if item.String() == ce.Value {
+						return true, nil
+					}
+				} else if item.Kind() == reflect.Interface {
+					if s, ok := item.Interface().(string); ok && s == ce.Value {
+						return true, nil
+					}
+				}
+			}
+			return false, nil
+		} else if ce.Operator == NE {
+			for i := 0; i < fieldValue.Len(); i++ {
+				item := fieldValue.Index(i)
+				if item.Kind() == reflect.Ptr && !item.IsNil() {
+					item = item.Elem()
+				}
+				if item.Kind() == reflect.String {
+					if item.String() == ce.Value {
+						return false, nil
+					}
+				} else if item.Kind() == reflect.Interface {
+					if s, ok := item.Interface().(string); ok && s == ce.Value {
+						return false, nil
+					}
+				}
+			}
+			return true, nil
 		}
 	}
 	return false, nil
@@ -305,13 +373,48 @@ func (p *Parser) peekTokenIs(t TokenType) bool {
 }
 
 func (p *Parser) ParseQuery() (Expression, error) {
+	// Handle empty query
+	if p.currentToken.Type == EOF {
+		return nil, nil
+	}
+
+	// Skip leading AND/OR tokens for user-friendly SQL-like queries
+	for p.currentToken.Type == AND || p.currentToken.Type == OR {
+		p.nextToken()
+	}
+
 	expr := p.parseOrExpression()
 	// Skip any trailing RPAREN tokens after parsing the main expression
 	for p.currentToken.Type == RPAREN {
 		p.nextToken()
 	}
-	if p.currentToken.Type != EOF {
+
+	// Check for unbalanced parentheses
+	parenBalance := 0
+	for _, char := range p.l.input {
+		if char == '(' {
+			parenBalance++
+		} else if char == ')' {
+			parenBalance--
+			// If parenBalance becomes negative, we have more closing parens than opening
+			if parenBalance < 0 {
+				p.errors = append(p.errors, "unbalanced parenthesis: unexpected closing )")
+				break
+			}
+		}
+	}
+
+	// If parenBalance is still positive, we have unclosed parens
+	if parenBalance > 0 {
+		p.errors = append(p.errors, "unbalanced parenthesis: missing closing )")
+	}
+
+	if p.currentToken.Type != EOF && len(p.errors) == 0 {
 		p.errors = append(p.errors, "unexpected token after end of query")
+	}
+
+	if len(p.errors) > 0 {
+		return nil, fmt.Errorf("%s", strings.Join(p.errors, "; "))
 	}
 	return expr, nil
 }
@@ -322,6 +425,11 @@ func (p *Parser) parseOrExpression() Expression {
 	for p.currentTokenIs(OR) {
 		p.nextToken() // move to right expr
 		right := p.parseAndExpression()
+		if right == nil {
+			// If there's an error in the right side, stop parsing this expression
+			p.errors = append(p.errors, "invalid expression after OR")
+			return expr
+		}
 		if orExpr, ok := expr.(*OrExpression); ok {
 			orExpr.Expressions = append(orExpr.Expressions, right)
 			expr = orExpr
@@ -338,9 +446,17 @@ func (p *Parser) parseOrExpression() Expression {
 // parseAndExpression handles AND precedence
 func (p *Parser) parseAndExpression() Expression {
 	expr := p.parsePrimary()
+	if expr == nil {
+		return nil
+	}
 	for p.currentTokenIs(AND) {
 		p.nextToken() // move to right expr
 		right := p.parsePrimary()
+		if right == nil {
+			// If there's an error in the right side, stop parsing this expression
+			p.errors = append(p.errors, "invalid expression after AND")
+			return expr
+		}
 		if andExpr, ok := expr.(*ConjunctionExpression); ok {
 			andExpr.Expressions = append(andExpr.Expressions, right)
 			expr = andExpr
@@ -356,43 +472,93 @@ func (p *Parser) parseAndExpression() Expression {
 
 func (p *Parser) parsePrimary() Expression {
 	if p.currentTokenIs(LPAREN) {
-		p.nextToken()                 // move to first expr inside parens
-		expr := p.parseOrExpression() // Use parseOrExpression for full precedence inside parens
-		if !p.currentTokenIs(RPAREN) && !p.currentTokenIs(EOF) {
-			fmt.Printf("DEBUG: parsePrimary expected RPAREN or EOF, got %s (%q)\n", p.currentToken.Type, p.currentToken.Literal)
-			p.errors = append(p.errors, "expected )")
-			return expr
-		}
+		// We're starting a parenthesized expression
+		p.nextToken()
+
+		// Handle empty parentheses
 		if p.currentTokenIs(RPAREN) {
-			p.nextToken() // Advance past RPAREN so parent sees next token
+			p.nextToken()
+			// Return a special "always false" expression
+			return &ConjunctionExpression{Expressions: []Expression{}}
+		}
+
+		expr := p.parseOrExpression() // Use parseOrExpression for full precedence inside parens
+
+		if expr == nil {
+			p.errors = append(p.errors, "invalid expression inside parentheses")
+			// Skip to matching parenthesis or EOF
+			for !p.currentTokenIs(EOF) && !p.currentTokenIs(RPAREN) {
+				p.nextToken()
+			}
+			if p.currentTokenIs(RPAREN) {
+				p.nextToken()
+			}
+			return nil
+		}
+
+		if p.currentTokenIs(RPAREN) {
+			p.nextToken()
+		} else {
+			// Handle special case where we might have hit EOF after string, could be a missing parenthesis
+			if p.currentToken.Type == EOF {
+				// Check if the last part of the input before EOF is a closing parenthesis
+				input := strings.TrimSpace(p.l.input)
+				if len(input) > 0 && input[len(input)-1] == ')' {
+					return expr // We found a closing paren at the end
+				}
+			}
+
+			p.errors = append(p.errors, "unbalanced parenthesis: missing closing )")
+			return nil // Return nil to prevent cascading errors
 		}
 		return expr
 	}
-	// Otherwise, parse a comparison
-	expr, err := p.parseComparison()
-	if err != nil {
-		p.errors = append(p.errors, err.Error())
-		return nil
+
+	if p.currentTokenIs(IDENTIFIER) {
+		field := p.currentToken.Literal
+		p.nextToken()
+
+		// Handle IS NULL / IS NOT NULL
+		if p.currentTokenIs(IS) {
+			p.nextToken()
+			not := false
+			if p.currentTokenIs(NOT) {
+				not = true
+				p.nextToken()
+			}
+			if p.currentTokenIs(NULL) {
+				p.nextToken()
+				return &IsNullExpression{Field: field, Not: not}
+			} else {
+				p.errors = append(p.errors, "expected NULL after IS")
+				return nil
+			}
+		}
+
+		expr, err := p.parseComparisonWithField(field)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
+			return nil
+		}
+		return expr
 	}
-	return expr
+
+	// If we get here, it's an unexpected token
+	if !p.currentTokenIs(EOF) {
+		p.errors = append(p.errors, fmt.Sprintf("unexpected token: %s", p.currentToken.Literal))
+		p.nextToken() // Skip over this token to try to continue parsing
+	}
+	return nil
 }
 
-// parseComparison is now only used by parsePrimary
-func (p *Parser) parseComparison() (*ComparisonExpression, error) {
-	expr := &ComparisonExpression{}
-
-	if !p.currentTokenIs(IDENTIFIER) {
-		return nil, fmt.Errorf("expected identifier, got %s (%q)", p.currentToken.Type, p.currentToken.Literal)
-	}
-	expr.Field = p.currentToken.Literal
-
-	p.nextToken()
+func (p *Parser) parseComparisonWithField(field string) (*ComparisonExpression, error) {
+	expr := &ComparisonExpression{Field: field}
 
 	switch p.currentToken.Type {
-	case EQ, NE, LT, GT, CONTAINS:
+	case EQ, NE, LT, GT, GE, LE, CONTAINS:
 		expr.Operator = p.currentToken.Type
 	default:
-		return nil, fmt.Errorf("expected operator (=, !=, <, >, CONTAINS), got %s (%q)", p.currentToken.Type, p.currentToken.Literal)
+		return nil, fmt.Errorf("expected operator (=, !=, <, >, <=, >=, CONTAINS), got %s (%q)", p.currentToken.Type, p.currentToken.Literal)
 	}
 
 	p.nextToken()
@@ -455,9 +621,23 @@ func (l *Lexer) NextToken() Token {
 			tok = newToken(ILLEGAL, l.ch)
 		}
 	case '<':
-		tok = newToken(LT, l.ch)
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			literal := string(ch) + string(l.ch)
+			tok = Token{Type: LE, Literal: literal}
+		} else {
+			tok = newToken(LT, l.ch)
+		}
 	case '>':
-		tok = newToken(GT, l.ch)
+		if l.peekChar() == '=' {
+			ch := l.ch
+			l.readChar()
+			literal := string(ch) + string(l.ch)
+			tok = Token{Type: GE, Literal: literal}
+		} else {
+			tok = newToken(GT, l.ch)
+		}
 	case '(': // Add LPAREN
 		tok = newToken(LPAREN, l.ch)
 	case ')': // Add RPAREN
@@ -522,9 +702,15 @@ func (l *Lexer) readString() string {
 		if l.ch == '\'' || l.ch == 0 {
 			break
 		}
+		// Handle escape sequences
+		if l.ch == '\\' && l.peekChar() == '\'' {
+			l.readChar() // Skip the backslash and include the quote
+		}
 	}
 	literal := l.input[position:l.position]
-	l.readChar()
+	if l.ch != 0 { // Only advance if we're not at EOF
+		l.readChar()
+	}
 	return literal
 }
 
@@ -549,6 +735,12 @@ func LookupIdentifier(identifier string) TokenType {
 		return OR
 	case "CONTAINS":
 		return CONTAINS
+	case "IS":
+		return IS
+	case "NULL":
+		return NULL
+	case "NOT":
+		return NOT
 	default:
 		return IDENTIFIER
 	}
@@ -556,13 +748,22 @@ func LookupIdentifier(identifier string) TokenType {
 
 // Evaluate for ConjunctionExpression
 func (ce *ConjunctionExpression) Evaluate(item reflect.Value) (bool, error) {
+	if len(ce.Expressions) == 0 {
+		return false, nil // Empty conjunction is always false (for empty parentheses case)
+	}
+
 	if len(ce.Expressions) == 1 {
 		return ce.Expressions[0].Evaluate(item)
 	}
+
 	// Check if all conditions are on the same field (including nested fields)
 	allCmp := true
 	var field string
 	for _, expr := range ce.Expressions {
+		if expr == nil {
+			allCmp = false
+			break
+		}
 		cmp, ok := expr.(*ComparisonExpression)
 		if !ok {
 			allCmp = false
@@ -575,11 +776,14 @@ func (ce *ConjunctionExpression) Evaluate(item reflect.Value) (bool, error) {
 			break
 		}
 	}
+
+	// Special case for AND conditions on the same field
 	if allCmp {
 		fieldValues, err := getFieldValues(item, field)
 		if err != nil || len(fieldValues) == 0 {
 			return false, nil
 		}
+
 		if fieldValues[0].Kind() == reflect.Slice {
 			for i := 0; i < fieldValues[0].Len(); i++ {
 				elem := fieldValues[0].Index(i)
@@ -597,20 +801,29 @@ func (ce *ConjunctionExpression) Evaluate(item reflect.Value) (bool, error) {
 			}
 			return false, nil
 		} else {
-			val := fieldValues[0]
-			allTrue := true
-			for _, expr := range ce.Expressions {
-				cmp := expr.(*ComparisonExpression)
-				if match, _ := cmp.compareValue(val); !match {
-					allTrue = false
-					break
+			// For scalar values, check all conditions against each value
+			for _, val := range fieldValues {
+				allTrue := true
+				for _, expr := range ce.Expressions {
+					cmp := expr.(*ComparisonExpression)
+					if match, _ := cmp.compareValue(val); !match {
+						allTrue = false
+						break
+					}
+				}
+				if !allTrue {
+					return false, nil
 				}
 			}
-			return allTrue, nil
+			return true, nil
 		}
 	}
+
 	// Fallback: for AND over different fields, all must be true for the same item
 	for _, expr := range ce.Expressions {
+		if expr == nil {
+			return false, nil
+		}
 		match, err := expr.Evaluate(item)
 		if err != nil || !match {
 			return false, nil
@@ -621,53 +834,6 @@ func (ce *ConjunctionExpression) Evaluate(item reflect.Value) (bool, error) {
 
 // Evaluate for OrExpression
 func (oe *OrExpression) Evaluate(item reflect.Value) (bool, error) {
-	if len(oe.Expressions) == 1 {
-		return oe.Expressions[0].Evaluate(item)
-	}
-	// Check if all conditions are on the same field (including nested fields)
-	allCmp := true
-	var field string
-	for _, expr := range oe.Expressions {
-		cmp, ok := expr.(*ComparisonExpression)
-		if !ok {
-			allCmp = false
-			break
-		}
-		if field == "" {
-			field = cmp.Field
-		} else if cmp.Field != field {
-			allCmp = false
-			break
-		}
-	}
-	if allCmp {
-		fieldValues, err := getFieldValues(item, field)
-		if err != nil || len(fieldValues) == 0 {
-			return false, nil
-		}
-		if fieldValues[0].Kind() == reflect.Slice {
-			for i := 0; i < fieldValues[0].Len(); i++ {
-				elem := fieldValues[0].Index(i)
-				for _, expr := range oe.Expressions {
-					cmp := expr.(*ComparisonExpression)
-					if match, _ := cmp.compareValue(elem); match {
-						return true, nil
-					}
-				}
-			}
-			return false, nil
-		} else {
-			val := fieldValues[0]
-			for _, expr := range oe.Expressions {
-				cmp := expr.(*ComparisonExpression)
-				if match, _ := cmp.compareValue(val); match {
-					return true, nil
-				}
-			}
-			return false, nil
-		}
-	}
-	// Fallback: for OR over different fields, return true if any condition is true for the same item
 	for _, expr := range oe.Expressions {
 		match, err := expr.Evaluate(item)
 		if err == nil && match {
@@ -675,4 +841,34 @@ func (oe *OrExpression) Evaluate(item reflect.Value) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// Add IsNullExpression type
+
+type IsNullExpression struct {
+	Field string
+	Not   bool
+}
+
+func (e *IsNullExpression) Evaluate(item reflect.Value) (bool, error) {
+	fieldValues, err := getFieldValues(item, e.Field)
+	if err != nil || len(fieldValues) == 0 {
+		return !e.Not, nil // IS NULL: true if not found; IS NOT NULL: false if not found
+	}
+	for _, v := range fieldValues {
+		if v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+			if v.IsNil() {
+				return !e.Not, nil
+			}
+		} else if v.Kind() == reflect.Slice {
+			if v.IsNil() || v.Len() == 0 {
+				return !e.Not, nil
+			}
+		} else if !v.IsValid() {
+			return !e.Not, nil
+		} else if v.IsZero() {
+			return !e.Not, nil
+		}
+	}
+	return e.Not, nil // IS NOT NULL: true if found and not nil/zero
 }
