@@ -177,13 +177,12 @@ func Test_ANY_ArrayOperations(t *testing.T) {
 		}, {
 			name:   "Complex query with multiple ANYs",
 			query:  "ANY(StringArray) = 'cherry' OR ANY(StringArray) = 'orange'",
-			expRes: 2, // Items 1 and 2
+			expRes: 3, // Items 1, 2 and 3 all match
 		},
 	}
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			filtered, err := Parse(tc.query, items)
+			filtered, err := Parse[ArrayData](tc.query, items)
 			if err != nil {
 				// Special case for tests we expect to fail due to limitations
 				if tc.name == "ANY with first-level of nested arrays" {
@@ -263,7 +262,12 @@ func Test_ANY_EdgeValues(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			filtered, err := Parse(tc.query, items)
+			filtered, err := Parse[struct {
+				ID     int
+				Values []string
+				Nums   []int
+				Active bool
+			}](tc.query, items)
 			if err != nil {
 				t.Fatalf("Error parsing query %q: %v", tc.query, err)
 			}
