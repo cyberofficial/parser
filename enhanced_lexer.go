@@ -79,7 +79,8 @@ func (l *EnhancedLexer) NextToken() Token {
 		}
 	case '(':
 		tok = newToken(LPAREN, l.ch)
-	case ')':		tok = newToken(RPAREN, l.ch)
+	case ')':
+		tok = newToken(RPAREN, l.ch)
 	case ',':
 		// Check if this comma is between digits, which would make it part of a number
 		if isDigit(l.peekChar()) && l.position > 0 && isDigit(l.input[l.position-1]) {
@@ -151,7 +152,7 @@ func (l *EnhancedLexer) readNumber() string {
 	if l.ch == '-' {
 		l.readChar()
 	}
-	
+
 	// Read integer part, allowing commas for readability (e.g., 1,000,000)
 	hasDigits := false
 	for isDigit(l.ch) || l.ch == ',' {
@@ -160,12 +161,12 @@ func (l *EnhancedLexer) readNumber() string {
 		}
 		l.readChar()
 	}
-	
+
 	if !hasDigits {
 		// Ensure we have at least one digit
 		return l.input[position:l.position]
 	}
-	
+
 	// Read decimal part if present
 	if l.ch == '.' && isDigit(l.peekChar()) {
 		l.readChar() // Read '.'
@@ -173,24 +174,24 @@ func (l *EnhancedLexer) readNumber() string {
 			l.readChar()
 		}
 	}
-	
+
 	// Read scientific notation if present (e.g., 1.23e45, 1e10)
-	if (l.ch == 'e' || l.ch == 'E') && (isDigit(l.peekChar()) || 
+	if (l.ch == 'e' || l.ch == 'E') && (isDigit(l.peekChar()) ||
 		((l.peekChar() == '+' || l.peekChar() == '-') && isDigit(peekTwoChars(l)))) {
-		
+
 		l.readChar() // Read 'e' or 'E'
-		
+
 		// Read sign if present
 		if l.ch == '+' || l.ch == '-' {
 			l.readChar()
 		}
-		
+
 		// Read exponent
 		for isDigit(l.ch) {
 			l.readChar()
 		}
 	}
-	
+
 	return l.input[position:l.position]
 }
 

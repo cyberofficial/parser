@@ -6,14 +6,14 @@ import (
 
 func TestEnhancedLexerNumericFormats(t *testing.T) {
 	tests := []struct {
-		input          string
-		expectedType   TokenType
+		input           string
+		expectedType    TokenType
 		expectedLiteral string
 	}{
 		{"42", NUMBER, "42"},
 		{"-42", NUMBER, "-42"},
 		{"3.14", NUMBER, "3.14"},
-		{"-3.14", NUMBER, "-3.14"},		{"1e6", NUMBER, "1e6"},
+		{"-3.14", NUMBER, "-3.14"}, {"1e6", NUMBER, "1e6"},
 		{"1.5e3", NUMBER, "1.5e3"},
 		{"1.5e-3", NUMBER, "1.5e-3"},
 		{"1.5e+3", NUMBER, "1.5e+3"},
