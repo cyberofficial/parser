@@ -95,7 +95,7 @@ func BenchmarkComplexQuery(b *testing.B) {
 
 func BenchmarkWithDataSize(b *testing.B) {
 	sizes := []int{10, 100, 1000}
-	
+
 	for _, size := range sizes {
 		b.Run("Size-"+strconv.Itoa(size), func(b *testing.B) {
 			// Create sample data of specified size
@@ -111,7 +111,7 @@ func BenchmarkWithDataSize(b *testing.B) {
 					Tags:     []string{"tag1", "tag2"},
 				}
 			}
-			
+
 			// Run the benchmark
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

@@ -342,14 +342,14 @@ func TestSyntaxErrors(t *testing.T) {
 
 	// These are the syntax errors that the parser currently catches
 	tests := []struct {
-		name    string
-		query   string
+		name        string
+		query       string
 		expectError bool
 	}{
 		{"Missing value", "Name = ", false}, // Parser doesn't catch this currently
 		{"Invalid operator", "Name <> 'Alice'", true},
 		{"Unclosed parenthesis", "(Name = 'Alice'", true},
-		{"Unclosed string", "Name = 'Alice", false}, // Parser doesn't catch this currently
+		{"Unclosed string", "Name = 'Alice", false},                     // Parser doesn't catch this currently
 		{"Invalid field reference", "NonExistentField = 'test'", false}, // Error happens at evaluation time, not parse time
 		{"Empty AND expression", "Name = 'Alice' AND", true},
 		{"Empty OR expression", "Name = 'Alice' OR", true},
@@ -371,7 +371,7 @@ func TestSyntaxErrors(t *testing.T) {
 func TestMapFields(t *testing.T) {
 	// This test is skipped because the current implementation doesn't support map field access in the way we're testing
 	t.Skip("Map field access test is skipped - current parser implementation doesn't support this pattern")
-	
+
 	people := []Person{
 		{
 			Name: "Alice",
@@ -475,8 +475,8 @@ func TestParenthesisAndPrecedence(t *testing.T) {
 			}
 
 			if len(results) != tt.expected {
-				t.Errorf("Query '%s' returned %d results, expected %d, got %v", 
-                         tt.query, len(results), tt.expected, getNames(results))
+				t.Errorf("Query '%s' returned %d results, expected %d, got %v",
+					tt.query, len(results), tt.expected, getNames(results))
 			}
 		})
 	}

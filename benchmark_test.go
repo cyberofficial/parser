@@ -58,62 +58,62 @@ func BenchmarkComplexQueries(b *testing.B) {
 	people := []BenchPerson{
 		{
 			Name: "Alice", Age: 30, IsEmployed: true,
-			Skills: []string{"Go", "Python", "SQL"},
-			Salary: 75000.50,
+			Skills:     []string{"Go", "Python", "SQL"},
+			Salary:     75000.50,
 			Department: &BenchDepartment{Name: "Engineering", Location: "New York"},
 		},
 		{
 			Name: "Bob", Age: 25, IsEmployed: false,
-			Skills: []string{"Java", "C++", "JavaScript"},
-			Salary: 65000.25,
+			Skills:     []string{"Java", "C++", "JavaScript"},
+			Salary:     65000.25,
 			Department: &BenchDepartment{Name: "Engineering", Location: "Remote"},
 		},
 		{
 			Name: "Charlie", Age: 35, IsEmployed: true,
-			Skills: []string{"Go", "Rust", "Docker"},
-			Salary: 85000.75,
+			Skills:     []string{"Go", "Rust", "Docker"},
+			Salary:     85000.75,
 			Department: &BenchDepartment{Name: "DevOps", Location: "Seattle"},
 		},
 		{
 			Name: "Diana", Age: 28, IsEmployed: true,
-			Skills: []string{"Python", "JavaScript", "React"},
-			Salary: 72000.00,
+			Skills:     []string{"Python", "JavaScript", "React"},
+			Salary:     72000.00,
 			Department: &BenchDepartment{Name: "Frontend", Location: "San Francisco"},
 		},
 		{
 			Name: "Eve", Age: 40, IsEmployed: true,
-			Skills: []string{"C#", ".NET", "Azure"},
-			Salary: 90000.00,
+			Skills:     []string{"C#", ".NET", "Azure"},
+			Salary:     90000.00,
 			Department: &BenchDepartment{Name: "Engineering", Location: "Boston"},
 		},
 		{
 			Name: "Frank", Age: 32, IsEmployed: true,
-			Skills: []string{"Go", "Kubernetes", "AWS"},
-			Salary: 80000.00,
+			Skills:     []string{"Go", "Kubernetes", "AWS"},
+			Salary:     80000.00,
 			Department: &BenchDepartment{Name: "DevOps", Location: "Seattle"},
 		},
 		{
 			Name: "Grace", Age: 45, IsEmployed: true,
-			Skills: []string{"Java", "Spring", "Hibernate"},
-			Salary: 95000.00,
+			Skills:     []string{"Java", "Spring", "Hibernate"},
+			Salary:     95000.00,
 			Department: &BenchDepartment{Name: "Backend", Location: "Chicago"},
 		},
 		{
 			Name: "Henry", Age: 27, IsEmployed: false,
-			Skills: []string{"Python", "Django", "PostgreSQL"},
-			Salary: 68000.00,
+			Skills:     []string{"Python", "Django", "PostgreSQL"},
+			Salary:     68000.00,
 			Department: &BenchDepartment{Name: "Backend", Location: "Remote"},
 		},
 		{
 			Name: "Ivy", Age: 38, IsEmployed: true,
-			Skills: []string{"JavaScript", "React", "Node.js"},
-			Salary: 88000.00,
+			Skills:     []string{"JavaScript", "React", "Node.js"},
+			Salary:     88000.00,
 			Department: &BenchDepartment{Name: "Frontend", Location: "Austin"},
 		},
 		{
 			Name: "Jack", Age: 50, IsEmployed: true,
-			Skills: []string{"Go", "C++", "Rust"},
-			Salary: 110000.00,
+			Skills:     []string{"Go", "C++", "Rust"},
+			Salary:     110000.00,
 			Department: nil,
 		},
 	}
@@ -188,9 +188,9 @@ func BenchmarkDataSizes(b *testing.B) {
 			data[i] = BenchPerson{
 				Name:       "Person-" + string(rune(65+(i%26))), // A-Z names
 				Age:        20 + (i % 45),                       // Ages 20-64
-				IsEmployed: i%3 != 0,                             // 2/3 are employed
+				IsEmployed: i%3 != 0,                            // 2/3 are employed
 				Skills:     skills[i%len(skills)],
-				Salary:     60000 + float64(i%50)*1000,          // 60k-110k salary
+				Salary:     60000 + float64(i%50)*1000, // 60k-110k salary
 				Department: departments[i%len(departments)],
 			}
 		}
@@ -212,7 +212,7 @@ func BenchmarkDataSizes(b *testing.B) {
 	sizes := []int{10, 100, 1000}
 	for _, size := range sizes {
 		data := generateData(size)
-		
+
 		for _, q := range queries {
 			b.Run(q.name+"-Size-"+fmt.Sprint(size), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
@@ -236,7 +236,7 @@ func BenchmarkParserCharacteristics(b *testing.B) {
 			Salary:     50000 + float64(i*1000),
 		}
 	}
-	
+
 	// Test different parsing characteristics
 	benchmarks := []struct {
 		name  string
@@ -245,31 +245,31 @@ func BenchmarkParserCharacteristics(b *testing.B) {
 		// Test parsing speed versus query complexity
 		{"Lexer_SimpleToken", "Age = 30"},
 		{"Lexer_ComplexTokens", "Age >= 30 AND IsEmployed = true AND Name CONTAINS 'Person'"},
-		
+
 		// Test operator performance
 		{"Op_Equality", "Name = 'Person-50'"},
 		{"Op_Comparison", "Age > 50"},
 		{"Op_Contains", "Name CONTAINS 'Person'"},
-		
+
 		// Test logical operator performance
 		{"Logic_SingleAND", "Age > 30 AND IsEmployed = true"},
 		{"Logic_MultipleAND", "Age > 30 AND IsEmployed = true AND Salary > 60000"},
 		{"Logic_SingleOR", "Age = 25 OR Age = 35"},
 		{"Logic_MultipleOR", "Age = 25 OR Age = 35 OR Age = 45"},
 		{"Logic_MixedANDOR", "Age > 30 AND (IsEmployed = true OR Salary > 70000)"},
-		
+
 		// Test parenthesis parsing and nesting depth
 		{"Paren_SingleLevel", "(Age > 30 AND IsEmployed = true)"},
 		{"Paren_TwoLevels", "((Age > 30) AND (IsEmployed = true))"},
 		{"Paren_ThreeLevels", "(((Age > 30) AND (IsEmployed = true)) OR (Salary > 80000))"},
-		
+
 		// Test query selectivity (percentage of records matched)
-		{"Select_High", "Age >= 20"}, // Almost all records
+		{"Select_High", "Age >= 20"},   // Almost all records
 		{"Select_Medium", "Age >= 45"}, // About half the records
-		{"Select_Low", "Age >= 65"}, // Very few records
-		{"Select_None", "Age > 100"}, // No records
+		{"Select_Low", "Age >= 65"},    // Very few records
+		{"Select_None", "Age > 100"},   // No records
 	}
-	
+
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
@@ -284,22 +284,22 @@ func BenchmarkSpecialOperators(b *testing.B) {
 	// Create dataset with special cases
 	people := []BenchPerson{
 		{
-			Name: "Alice", 
-			Skills: []string{"Go", "Python", "SQL", "Docker", "Kubernetes", "AWS"}, // Many skills
+			Name:       "Alice",
+			Skills:     []string{"Go", "Python", "SQL", "Docker", "Kubernetes", "AWS"}, // Many skills
 			Department: &BenchDepartment{Name: "Engineering", Location: "New York"},
 		},
 		{
-			Name: "Bob",
-			Skills: []string{},  // Empty skills array 
-			Department: nil,     // Null department
+			Name:       "Bob",
+			Skills:     []string{}, // Empty skills array
+			Department: nil,        // Null department
 		},
 		{
-			Name: "Charlie",
-			Skills: []string{"Go"},  // Single skill
+			Name:       "Charlie",
+			Skills:     []string{"Go"},                           // Single skill
 			Department: &BenchDepartment{Name: "", Location: ""}, // Empty strings
 		},
 	}
-	
+
 	// Sample of 100 people based on the above templates
 	var data []BenchPerson
 	for i := 0; i < 100; i++ {
@@ -309,7 +309,7 @@ func BenchmarkSpecialOperators(b *testing.B) {
 		person.IsEmployed = i%3 == 0
 		data = append(data, person)
 	}
-	
+
 	benchmarks := []struct {
 		name  string
 		query string
@@ -317,26 +317,26 @@ func BenchmarkSpecialOperators(b *testing.B) {
 		// IS NULL operator
 		{"IsNull", "Department IS NULL"},
 		{"IsNotNull", "Department IS NOT NULL"},
-		
+
 		// NOT operator
 		{"Not_Simple", "NOT IsEmployed = true"},
 		{"Not_Complex", "NOT (Age > 30 AND IsEmployed = true)"},
-		
+
 		// ANY operator
 		{"Any_SingleValue", "ANY(Skills) = 'Go'"},
 		{"Any_MultipleValues", "ANY(Skills) = ANY('Go', 'Python', 'Rust')"},
 		{"Any_WithContains", "ANY(Skills) CONTAINS 'Go'"},
-		
+
 		// CONTAINS with different string lengths
 		{"Contains_Short", "Name CONTAINS 'A'"},
 		{"Contains_Medium", "Name CONTAINS 'Ali'"},
 		{"Contains_Long", "Name CONTAINS 'Alice'"},
-		
+
 		// Empty arrays and edge cases
 		{"Array_Empty", "Skills = ''"},
 		{"Array_EmptyCheck", "Skills CONTAINS ''"},
 	}
-	
+
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
@@ -363,26 +363,26 @@ func BenchmarkMemoryPatterns(b *testing.B) {
 			},
 		}
 	}
-	
+
 	benchmarks := []struct {
 		name  string
 		query string
 	}{
 		// Queries with increasing complexity to test memory allocation patterns
-		{"Memory_VerySimple", "Age = 30"}, // Simplest case
-		{"Memory_Simple", "Age > 30 AND IsEmployed = true"}, // Simple logical operation
-		{"Memory_Medium", "Age > 30 AND IsEmployed = true AND Salary > 60000"}, // More conditions
+		{"Memory_VerySimple", "Age = 30"},                                                                         // Simplest case
+		{"Memory_Simple", "Age > 30 AND IsEmployed = true"},                                                       // Simple logical operation
+		{"Memory_Medium", "Age > 30 AND IsEmployed = true AND Salary > 60000"},                                    // More conditions
 		{"Memory_Complex", "(Age > 30 AND IsEmployed = true) OR (Salary > 70000 AND Department.Name = 'Dept-1')"}, // With parentheses and OR
 		{"Memory_VeryComplex", "((Age > 30 AND IsEmployed = true) OR (Salary > 70000)) AND (Department.Name = 'Dept-1' OR Department.Location CONTAINS 'Location')"}, // Nested parentheses
-		
+
 		// Specific operations that might have distinct memory patterns
-		{"Memory_Contains", "Name CONTAINS 'Person'"}, // String operations
-		{"Memory_IsNull", "Department IS NULL"}, // NULL checks 
-		{"Memory_Not", "NOT IsEmployed = true"}, // NOT operations
-		{"Memory_Any", "ANY(Skills) = 'Skill1'"}, // ANY operator
+		{"Memory_Contains", "Name CONTAINS 'Person'"},                                          // String operations
+		{"Memory_IsNull", "Department IS NULL"},                                                // NULL checks
+		{"Memory_Not", "NOT IsEmployed = true"},                                                // NOT operations
+		{"Memory_Any", "ANY(Skills) = 'Skill1'"},                                               // ANY operator
 		{"Memory_Nested", "Department.Name = 'Dept-1' AND Department.Location = 'Location-1'"}, // Nested field access
 	}
-	
+
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
 			b.ReportAllocs() // Explicitly report allocations
@@ -406,22 +406,22 @@ func BenchmarkQueryReuse(b *testing.B) {
 			Salary:     50000 + float64(i*1000),
 		}
 	}
-	
+
 	// Define the query we'll use repeatedly
 	query := "Age > 30 AND IsEmployed = true AND Salary > 60000"
-	
+
 	b.Run("FirstRun", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			_, _ = Parse(query, data)
 		}
 	})
-	
+
 	// Run the same query multiple times in a loop to see if there's any caching effect
 	b.Run("RepeatedRuns", func(b *testing.B) {
 		b.StopTimer()
 		queriesRun := 0
 		b.StartTimer()
-		
+
 		for i := 0; i < b.N; i++ {
 			// Run the same query 10 times per iteration
 			for j := 0; j < 10; j++ {
@@ -429,7 +429,7 @@ func BenchmarkQueryReuse(b *testing.B) {
 				queriesRun++
 			}
 		}
-		
+
 		// Report the actual number of queries executed
 		b.ReportMetric(float64(queriesRun)/float64(b.N), "queries/op")
 	})
