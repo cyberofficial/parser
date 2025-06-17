@@ -6,32 +6,29 @@ import (
 )
 
 func TestMissingClosingParen(t *testing.T) {
-	// The problematic query
+	// The problematic query that was fixed
 	query := "Age = 25 OR (Age = 30 AND Address.City = 'Anytown')"
 
-	// Manual lexing to find the issue
-	t.Log("Manual lexing to ensure we properly handle parentheses...")
-
-	// Count parentheses manually
+	// Count parentheses to verify they're balanced
 	openCount := strings.Count(query, "(")
 	closeCount := strings.Count(query, ")")
 
-	t.Logf("Open parens: %d, Close parens: %d", openCount, closeCount)
-
-	// If they don't match, add them
-	if openCount > closeCount {
-		query = query + strings.Repeat(")", openCount-closeCount)
-		t.Logf("Added missing closing parens, new query: %s", query)
+	// Ensure parentheses are balanced
+	if openCount != closeCount {
+		t.Errorf("Unbalanced parentheses in test query: %d open, %d close", openCount, closeCount)
 	}
 
-	// Test with fixed query
+	// Parse the query
 	l := NewLexer(query)
 	p := NewParser(l)
 	expr, err := p.ParseQuery()
 
 	if err != nil {
-		t.Errorf("Expected successful parse after fixing parentheses, got error: %v", err)
-	} else {
-		t.Logf("Successfully parsed with fixed query: %T", expr)
+		t.Errorf("Failed to parse balanced query: %v", err)
+	}
+	
+	// Verify we got an expression of the correct type
+	if _, ok := expr.(*OrExpression); !ok {
+		t.Errorf("Expected OrExpression, got %T", expr)
 	}
 }

@@ -61,7 +61,8 @@ type OrExpression struct {
 }
 
 func Parse[T any](query string, data []T) ([]T, error) {
-	l := NewLexer(query)
+	// Use the enhanced lexer that supports negative numbers
+	l := NewEnhancedLexer(query)
 	p := NewParser(l)
 
 	ast, err := p.ParseQuery()
@@ -340,15 +341,20 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 	return false, nil
 }
 
+// LexerInterface defines the interface for any lexer that can be used with the parser
+type LexerInterface interface {
+	NextToken() Token
+}
+
 type Parser struct {
-	l *Lexer
+	l LexerInterface
 
 	currentToken Token
 	peekToken    Token
 	errors       []string
 }
 
-func NewParser(l *Lexer) *Parser {
+func NewParser(l LexerInterface) *Parser {
 	p := &Parser{l: l, errors: []string{}}
 	p.nextToken()
 	p.nextToken()
@@ -368,9 +374,7 @@ func (p *Parser) currentTokenIs(t TokenType) bool {
 	return p.currentToken.Type == t
 }
 
-func (p *Parser) peekTokenIs(t TokenType) bool {
-	return p.peekToken.Type == t
-}
+
 
 func (p *Parser) ParseQuery() (Expression, error) {
 	// Handle empty query
@@ -382,31 +386,15 @@ func (p *Parser) ParseQuery() (Expression, error) {
 	for p.currentToken.Type == AND || p.currentToken.Type == OR {
 		p.nextToken()
 	}
-
 	expr := p.parseOrExpression()
-	// Skip any trailing RPAREN tokens after parsing the main expression
-	for p.currentToken.Type == RPAREN {
-		p.nextToken()
-	}
 
-	// Check for unbalanced parentheses
-	parenBalance := 0
-	for _, char := range p.l.input {
-		if char == '(' {
-			parenBalance++
-		} else if char == ')' {
-			parenBalance--
-			// If parenBalance becomes negative, we have more closing parens than opening
-			if parenBalance < 0 {
-				p.errors = append(p.errors, "unbalanced parenthesis: unexpected closing )")
-				break
-			}
+	// Check for unexpected trailing RPAREN tokens after parsing the main expression
+	if p.currentToken.Type == RPAREN {
+		p.errors = append(p.errors, "unbalanced parenthesis: unexpected closing )")
+		// Skip any trailing RPAREN tokens
+		for p.currentToken.Type == RPAREN {
+			p.nextToken()
 		}
-	}
-
-	// If parenBalance is still positive, we have unclosed parens
-	if parenBalance > 0 {
-		p.errors = append(p.errors, "unbalanced parenthesis: missing closing )")
 	}
 
 	if p.currentToken.Type != EOF && len(p.errors) == 0 {
@@ -498,14 +486,11 @@ func (p *Parser) parsePrimary() Expression {
 
 		if p.currentTokenIs(RPAREN) {
 			p.nextToken()
-		} else {
-			// Handle special case where we might have hit EOF after string, could be a missing parenthesis
+		} else {			// Handle special case where we might have hit EOF after string
+			// We can no longer check the last character of the input
 			if p.currentToken.Type == EOF {
-				// Check if the last part of the input before EOF is a closing parenthesis
-				input := strings.TrimSpace(p.l.input)
-				if len(input) > 0 && input[len(input)-1] == ')' {
-					return expr // We found a closing paren at the end
-				}
+				// Just assume there's a missing closing parenthesis
+				p.errors = append(p.errors, "unbalanced parenthesis: missing closing parenthesis at end of input")
 			}
 
 			p.errors = append(p.errors, "unbalanced parenthesis: missing closing )")
@@ -568,10 +553,7 @@ func (p *Parser) parseComparisonWithField(field string) (*ComparisonExpression, 
 	return expr, nil
 }
 
-// parseExpression is now an alias for parseOrExpression for compatibility
-func (p *Parser) parseExpression() Expression {
-	return p.parseOrExpression()
-}
+
 
 type Lexer struct {
 	input        string
@@ -634,17 +616,26 @@ func (l *Lexer) NextToken() Token {
 			ch := l.ch
 			l.readChar()
 			literal := string(ch) + string(l.ch)
-			tok = Token{Type: GE, Literal: literal}
-		} else {
-			tok = newToken(GT, l.ch)
-		}
-	case '(': // Add LPAREN
+			tok = Token{Type: GE, Literal: literal}    } else {
+        tok = newToken(GT, l.ch)
+    }
+    case '(': // Add LPAREN
 		tok = newToken(LPAREN, l.ch)
 	case ')': // Add RPAREN
 		tok = newToken(RPAREN, l.ch)
 	case '\'':
 		tok.Type = STRING
 		tok.Literal = l.readString()
+		return tok
+	case '-': 
+		// Check if it's a negative number
+		if isDigit(l.peekChar()) {
+			tok.Type = NUMBER
+			tok.Literal = l.readNumber()
+			return tok
+		} else {
+			tok = newToken(ILLEGAL, l.ch)
+		}
 	case 0: // EOF
 		tok.Literal = ""
 		tok.Type = EOF
@@ -683,6 +674,10 @@ func (l *Lexer) readIdentifier() string {
 
 func (l *Lexer) readNumber() string {
 	position := l.position
+	// Handle negative numbers
+	if l.ch == '-' {
+		l.readChar()
+	}
 	for isDigit(l.ch) {
 		l.readChar()
 	}
