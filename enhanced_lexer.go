@@ -1,5 +1,7 @@
 package parser
 
+import "strings"
+
 // An enhanced lexer that supports negative numbers
 type EnhancedLexer struct {
 	input        string
@@ -76,6 +78,11 @@ func (l *EnhancedLexer) NextToken() Token {
 	case '\'':
 		tok.Type = STRING
 		tok.Literal = l.readString()
+		// Check for unclosed string marker
+		if strings.HasPrefix(tok.Literal, "_UNCLOSED_STRING_") {
+			tok.Type = ILLEGAL
+			tok.Literal = "unclosed string: " + strings.TrimPrefix(tok.Literal, "_UNCLOSED_STRING_")
+		}
 		return tok
 	case '-':
 		// Check if it's a negative number
@@ -153,8 +160,14 @@ func (l *EnhancedLexer) readString() string {
 		}
 	}
 	literal := l.input[position:l.position]
+	// Check if the string was unclosed (ended with EOF)
+	isUnclosed := l.ch == 0
 	if l.ch != 0 { // Only advance if we're not at EOF
 		l.readChar()
+	}
+	if isUnclosed {
+		// Return a special marker that can be checked by the token consumer
+		return "_UNCLOSED_STRING_" + literal
 	}
 	return literal
 }

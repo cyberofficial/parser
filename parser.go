@@ -741,6 +741,11 @@ func (p *Parser) Errors() []string {
 func (p *Parser) nextToken() {
 	p.currentToken = p.peekToken
 	p.peekToken = p.l.NextToken()
+
+	// If the peek token is ILLEGAL, record the error
+	if p.peekToken.Type == ILLEGAL {
+		p.errors = append(p.errors, p.peekToken.Literal)
+	}
 }
 
 func (p *Parser) currentTokenIs(t TokenType) bool {
@@ -753,11 +758,23 @@ func (p *Parser) ParseQuery() (Expression, error) {
 		return nil, nil
 	}
 
+	// Check for illegal tokens early (like unclosed strings)
+	if p.currentToken.Type == ILLEGAL {
+		p.errors = append(p.errors, p.currentToken.Literal)
+		return nil, fmt.Errorf("%s", p.currentToken.Literal)
+	}
+
 	// Skip leading AND/OR tokens for user-friendly SQL-like queries
 	for p.currentToken.Type == AND || p.currentToken.Type == OR {
 		p.nextToken()
 	}
 	expr := p.parseOrExpression()
+
+	// Check for unclosed strings or other illegal tokens that might have been encountered
+	if p.currentToken.Type == ILLEGAL {
+		p.errors = append(p.errors, p.currentToken.Literal)
+		return nil, fmt.Errorf("%s", p.currentToken.Literal)
+	}
 
 	// Check for unexpected trailing RPAREN tokens after parsing the main expression
 	if p.currentToken.Type == RPAREN {

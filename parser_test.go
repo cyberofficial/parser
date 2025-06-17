@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -349,7 +350,7 @@ func TestSyntaxErrors(t *testing.T) {
 		{"Missing value", "Name = ", false}, // Parser doesn't catch this currently
 		{"Invalid operator", "Name <> 'Alice'", true},
 		{"Unclosed parenthesis", "(Name = 'Alice'", true},
-		{"Unclosed string", "Name = 'Alice", false},                     // Parser doesn't catch this currently
+		{"Unclosed string", "Name = 'Alice", true},                      // Parser now catches this
 		{"Invalid field reference", "NonExistentField = 'test'", false}, // Error happens at evaluation time, not parse time
 		{"Empty AND expression", "Name = 'Alice' AND", true},
 		{"Empty OR expression", "Name = 'Alice' OR", true},
@@ -477,6 +478,54 @@ func TestParenthesisAndPrecedence(t *testing.T) {
 			if len(results) != tt.expected {
 				t.Errorf("Query '%s' returned %d results, expected %d, got %v",
 					tt.query, len(results), tt.expected, getNames(results))
+			}
+		})
+	}
+}
+
+func TestUnclosedStringDetection(t *testing.T) {
+	people := []Person{
+		{Name: "Alice"},
+		{Name: "Bob"},
+	}
+
+	tests := []struct {
+		name    string
+		query   string
+		wantErr bool
+	}{
+		{
+			name:    "Properly closed string",
+			query:   "Name = 'Alice'",
+			wantErr: false,
+		},
+		{
+			name:    "Unclosed string",
+			query:   "Name = 'Alice",
+			wantErr: true,
+		},
+		{
+			name:    "Unclosed string with escape",
+			query:   "Name = 'Alice\\'",
+			wantErr: true,
+		},
+		{
+			name:    "String with escaped quote",
+			query:   "Name = 'Alice\\'s'",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.query, people)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Parse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && tt.wantErr {
+				if !strings.Contains(err.Error(), "unclosed string") {
+					t.Errorf("Expected error message to contain 'unclosed string', got: %v", err)
+				}
 			}
 		})
 	}

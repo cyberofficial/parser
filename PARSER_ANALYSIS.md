@@ -69,7 +69,10 @@ The benchmark tests evaluate the parser's performance across different query typ
 
 ## Suggestions for Improvement
 
-1. Enhance error handling for edge cases like unclosed strings
+1. ✅ Enhance error handling for edge cases like unclosed strings
+   - Added validation for unclosed strings in the enhanced lexer
+   - Added dedicated test cases to ensure detection of unclosed strings
+   - Modified the parser to properly handle ILLEGAL tokens from the lexer
 2. Improve map field access functionality
 3. Add better handling for non-existent fields
 4. Add validation for numeric values in comparisons
