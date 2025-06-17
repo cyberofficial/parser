@@ -60,6 +60,11 @@ type AnyExpression struct {
 	Values   []string
 }
 
+// NotExpression represents a NOT operation on another expression
+type NotExpression struct {
+	Expression Expression
+}
+
 type ConjunctionExpression struct {
 	Expressions []Expression
 }
@@ -179,6 +184,17 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 
 // getFieldByNameCaseInsensitive returns the struct field with a name matching 'name' (case-insensitive), or an invalid reflect.Value if not found
 func getFieldByNameCaseInsensitive(val reflect.Value, name string) reflect.Value {
+	// If it's a map with string keys, try to find a case-insensitive key match
+	if val.Kind() == reflect.Map && val.Type().Key().Kind() == reflect.String {
+		for _, key := range val.MapKeys() {
+			if strings.EqualFold(key.String(), name) {
+				return val.MapIndex(key)
+			}
+		}
+		return reflect.Value{}
+	}
+
+	// Otherwise, for structs, match field names case-insensitively
 	typeOfVal := val.Type()
 	for i := 0; i < typeOfVal.NumField(); i++ {
 		field := typeOfVal.Field(i)
@@ -514,6 +530,14 @@ func (ae *AnyExpression) compareValue(fieldValue reflect.Value, value string) (b
 			return s == value, nil
 		case NE:
 			return s != value, nil
+		case LT:
+			return s < value, nil
+		case GT:
+			return s > value, nil
+		case LE:
+			return s <= value, nil
+		case GE:
+			return s >= value, nil
 		case CONTAINS:
 			return strings.Contains(s, value), nil
 		}
@@ -533,6 +557,14 @@ func (ae *AnyExpression) compareValue(fieldValue reflect.Value, value string) (b
 			return fv == v, nil
 		case NE:
 			return fv != v, nil
+		case LT:
+			return fv < v, nil
+		case GT:
+			return fv > v, nil
+		case LE:
+			return fv <= v, nil
+		case GE:
+			return fv >= v, nil
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		v, _ := strconv.ParseUint(value, 10, 64)
@@ -542,6 +574,14 @@ func (ae *AnyExpression) compareValue(fieldValue reflect.Value, value string) (b
 			return fv == v, nil
 		case NE:
 			return fv != v, nil
+		case LT:
+			return fv < v, nil
+		case GT:
+			return fv > v, nil
+		case LE:
+			return fv <= v, nil
+		case GE:
+			return fv >= v, nil
 		}
 	case reflect.Float32, reflect.Float64:
 		v, _ := strconv.ParseFloat(value, 64)
@@ -551,6 +591,14 @@ func (ae *AnyExpression) compareValue(fieldValue reflect.Value, value string) (b
 			return fv == v, nil
 		case NE:
 			return fv != v, nil
+		case LT:
+			return fv < v, nil
+		case GT:
+			return fv > v, nil
+		case LE:
+			return fv <= v, nil
+		case GE:
+			return fv >= v, nil
 		}
 	case reflect.Slice:
 		// For a slice field, check if the value exists in the slice
@@ -575,6 +623,72 @@ func (ae *AnyExpression) compareValue(fieldValue reflect.Value, value string) (b
 					}
 				case CONTAINS:
 					if strings.Contains(item.String(), value) {
+						return true, nil
+					}
+				}
+			} else if item.Kind() == reflect.Int || item.Kind() == reflect.Int8 ||
+				item.Kind() == reflect.Int16 || item.Kind() == reflect.Int32 ||
+				item.Kind() == reflect.Int64 {
+				v, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					return false, nil
+				}
+				itemVal := item.Int()
+				switch ae.Operator {
+				case EQ:
+					if itemVal == v {
+						return true, nil
+					}
+				case NE:
+					if itemVal != v {
+						return true, nil
+					}
+				case LT:
+					if itemVal < v {
+						return true, nil
+					}
+				case GT:
+					if itemVal > v {
+						return true, nil
+					}
+				case LE:
+					if itemVal <= v {
+						return true, nil
+					}
+				case GE:
+					if itemVal >= v {
+						return true, nil
+					}
+				}
+			} else if item.Kind() == reflect.Float32 || item.Kind() == reflect.Float64 {
+				v, err := strconv.ParseFloat(value, 64)
+				if err != nil {
+					return false, nil
+				}
+				itemVal := item.Float()
+				switch ae.Operator {
+				case EQ:
+					if itemVal == v {
+						return true, nil
+					}
+				case NE:
+					if itemVal != v {
+						return true, nil
+					}
+				case LT:
+					if itemVal < v {
+						return true, nil
+					}
+				case GT:
+					if itemVal > v {
+						return true, nil
+					}
+				case LE:
+					if itemVal <= v {
+						return true, nil
+					}
+				case GE:
+					if itemVal >= v {
 						return true, nil
 					}
 				}
@@ -716,6 +830,17 @@ func (p *Parser) parseAndExpression() Expression {
 }
 
 func (p *Parser) parsePrimary() Expression {
+	// Handle NOT operator
+	if p.currentTokenIs(NOT) {
+		p.nextToken() // consume NOT
+		expr := p.parsePrimary()
+		if expr == nil {
+			p.errors = append(p.errors, "invalid expression after NOT")
+			return nil
+		}
+		return &NotExpression{Expression: expr}
+	}
+
 	if p.currentTokenIs(LPAREN) {
 		// We're starting a parenthesized expression
 		p.nextToken()
@@ -759,14 +884,14 @@ func (p *Parser) parsePrimary() Expression {
 	// Handle ANY operator
 	if p.currentTokenIs(ANY) {
 		p.nextToken() // Move past ANY
-		
+
 		// Expect left parenthesis
 		if !p.currentTokenIs(LPAREN) {
 			p.errors = append(p.errors, "expected '(' after ANY")
 			return nil
 		}
 		p.nextToken() // Move past (
-		
+
 		// Read field name
 		if !p.currentTokenIs(IDENTIFIER) {
 			p.errors = append(p.errors, "expected field name inside ANY()")
@@ -774,25 +899,24 @@ func (p *Parser) parsePrimary() Expression {
 		}
 		field := p.currentToken.Literal
 		p.nextToken() // Move past field name
-		
+
 		// Expect right parenthesis
 		if !p.currentTokenIs(RPAREN) {
 			p.errors = append(p.errors, "expected ')' after field name in ANY()")
 			return nil
 		}
 		p.nextToken() // Move past )
-		
 		// Parse the comparison operator
 		var operator TokenType
 		switch p.currentToken.Type {
-		case EQ, NE:
+		case EQ, NE, LT, GT, LE, GE, CONTAINS:
 			operator = p.currentToken.Type
 		default:
-			p.errors = append(p.errors, "expected comparison operator (= or !=) after ANY()")
+			p.errors = append(p.errors, "expected comparison operator (=, !=, <, >, <=, >=, CONTAINS) after ANY()")
 			return nil
 		}
 		p.nextToken() // Move past operator
-		
+
 		// Expect ANY values
 		if !p.currentTokenIs(ANY) {
 			// Handle simple case for single value comparison: ANY(field) = 'value'
@@ -805,22 +929,22 @@ func (p *Parser) parsePrimary() Expression {
 				p.nextToken() // Move past value
 				return ae
 			}
-			
+
 			p.errors = append(p.errors, "expected ANY() for values or a direct value")
 			return nil
 		}
 		p.nextToken() // Move past ANY
-		
+
 		// Expect left parenthesis for values
 		if !p.currentTokenIs(LPAREN) {
 			p.errors = append(p.errors, "expected '(' after ANY")
 			return nil
 		}
 		p.nextToken() // Move past (
-		
+
 		// Parse value list
 		values := []string{}
-		
+
 		// Read the first value
 		if !p.currentTokenIs(STRING) && !p.currentTokenIs(NUMBER) {
 			p.errors = append(p.errors, "expected string or number value in ANY()")
@@ -828,11 +952,11 @@ func (p *Parser) parsePrimary() Expression {
 		}
 		values = append(values, p.currentToken.Literal)
 		p.nextToken() // Move past first value
-		
+
 		// Read additional values if present
 		for p.currentTokenIs(COMMA) {
 			p.nextToken() // Move past comma
-			
+
 			if !p.currentTokenIs(STRING) && !p.currentTokenIs(NUMBER) {
 				p.errors = append(p.errors, "expected string or number value after comma in ANY()")
 				return nil
@@ -840,14 +964,14 @@ func (p *Parser) parsePrimary() Expression {
 			values = append(values, p.currentToken.Literal)
 			p.nextToken() // Move past value
 		}
-		
+
 		// Expect right parenthesis to close values
 		if !p.currentTokenIs(RPAREN) {
 			p.errors = append(p.errors, "expected ')' after values in ANY()")
 			return nil
 		}
 		p.nextToken() // Move past )
-		
+
 		return &AnyExpression{
 			Field:    field,
 			Operator: operator,
@@ -1096,4 +1220,13 @@ func LookupIdentifier(identifier string) TokenType {
 	default:
 		return IDENTIFIER
 	}
+}
+
+// Evaluate for NotExpression
+func (ne *NotExpression) Evaluate(item reflect.Value) (bool, error) {
+	result, err := ne.Expression.Evaluate(item)
+	if err != nil {
+		return false, err
+	}
+	return !result, nil
 }

@@ -54,11 +54,11 @@ func Test_ANY_Syntax(t *testing.T) {
 			},
 		},
 		{
-			ID:     4,
-			Tags:   []string{"python", "article"},
-			Scores: []int{95, 90, 92},
-			Skills: []string{"coding", "research"},
-			Active: false,
+			ID:       4,
+			Tags:     []string{"python", "article"},
+			Scores:   []int{95, 90, 92},
+			Skills:   []string{"coding", "research"},
+			Active:   false,
 			Metadata: nil, // Test null metadata
 		},
 	}
@@ -115,7 +115,7 @@ func Test_ANY_Syntax(t *testing.T) {
 		},
 		{
 			name:   "Single ANY value comparison",
-			query:  "ANY(Tags) = 'python'", 
+			query:  "ANY(Tags) = 'python'",
 			expRes: 2, // Items 1 and 4 match
 		},
 	}
