@@ -370,8 +370,7 @@ func TestSyntaxErrors(t *testing.T) {
 }
 
 func TestMapFields(t *testing.T) {
-	// This test is skipped because the current implementation doesn't support map field access in the way we're testing
-	t.Skip("Map field access test is skipped - current parser implementation doesn't support this pattern")
+	// Map field access should now be working
 
 	people := []Person{
 		{
@@ -398,6 +397,88 @@ func TestMapFields(t *testing.T) {
 		{"Map field equality", "Tags.team = 'backend'", 1},
 		{"Map field contains", "Tags.location CONTAINS 'remote'", 1},
 		{"Case insensitive map key", "Tags.TEAM = 'frontend'", 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := Parse(tt.query, people)
+			if err != nil {
+				t.Fatalf("Error parsing query '%s': %v", tt.query, err)
+			}
+
+			if len(results) != tt.expected {
+				t.Errorf("Query '%s' returned %d results, expected %d", tt.query, len(results), tt.expected)
+			}
+		})
+	}
+}
+
+func TestNestedMapFields(t *testing.T) {
+	type ComplexPerson struct {
+		Name       string
+		Properties map[string]interface{}
+	}
+
+	people := []ComplexPerson{
+		{
+			Name: "Alice",
+			Properties: map[string]interface{}{
+				"contact": map[string]interface{}{
+					"email": "alice@example.com",
+					"phone": "123-456-7890",
+				},
+				"preferences": map[string]interface{}{
+					"theme": "dark",
+					"notifications": map[string]interface{}{
+						"email": true,
+						"push":  false,
+					},
+				},
+			},
+		},
+		{
+			Name: "Bob",
+			Properties: map[string]interface{}{
+				"contact": map[string]interface{}{
+					"email": "bob@example.com",
+					"phone": "098-765-4321",
+				},
+				"preferences": map[string]interface{}{
+					"theme": "light",
+					"notifications": map[string]interface{}{
+						"email": false,
+						"push":  true,
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		query    string
+		expected int
+	}{
+		{
+			name:     "Simple map access",
+			query:    "Properties.preferences.theme = 'dark'",
+			expected: 1,
+		},
+		{
+			name:     "Deeply nested map access",
+			query:    "Properties.preferences.notifications.email = true",
+			expected: 1,
+		},
+		{
+			name:     "Case insensitive map keys",
+			query:    "Properties.CONTACT.email = 'bob@example.com'",
+			expected: 1,
+		},
+		{
+			name:     "Contains operator on map value",
+			query:    "Properties.contact.email CONTAINS 'alice'",
+			expected: 1,
+		},
 	}
 
 	for _, tt := range tests {

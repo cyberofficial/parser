@@ -122,7 +122,6 @@ func Parse[T any](query string, data []T) ([]T, error) {
 func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, error) {
 	parts := strings.Split(fieldPath, ".")
 	currentValues := []reflect.Value{item}
-
 	for _, part := range parts {
 		nextValues := []reflect.Value{}
 		for _, val := range currentValues {
@@ -132,6 +131,12 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 				}
 				val = val.Elem()
 			}
+			
+			// Handle interface{} values by getting the underlying value
+			if val.Kind() == reflect.Interface {
+				val = val.Elem()
+			}
+			
 			if val.Kind() == reflect.Slice {
 				for j := 0; j < val.Len(); j++ {
 					elem := val.Index(j)
@@ -141,7 +146,13 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 						}
 						elem = elem.Elem()
 					}
-					if elem.Kind() == reflect.Struct {
+					
+					// Handle interface{} values in slices
+					if elem.Kind() == reflect.Interface {
+						elem = elem.Elem()
+					}
+					
+					if elem.Kind() == reflect.Struct || elem.Kind() == reflect.Map {
 						field := getFieldByNameCaseInsensitive(elem, part)
 						if field.IsValid() {
 							nextValues = append(nextValues, field)
@@ -160,7 +171,21 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 				nextValues = append(nextValues, field)
 				continue
 			}
-			// For non-struct, non-slice, just append (should only happen at leaf)
+			if val.Kind() == reflect.Map {
+				// Handle map traversal
+				if val.Type().Key().Kind() != reflect.String {
+					// Only string keys can be accessed by field path
+					continue
+				}
+				
+				// Try to find the key case-insensitively
+				mapValue := getMapValue(val, part)
+				if mapValue.IsValid() {
+					nextValues = append(nextValues, mapValue)
+				}
+				continue
+			}
+			// For non-struct, non-slice, non-map, just append (should only happen at leaf)
 			nextValues = append(nextValues, val)
 		}
 		currentValues = nextValues
@@ -184,14 +209,9 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 
 // getFieldByNameCaseInsensitive returns the struct field with a name matching 'name' (case-insensitive), or an invalid reflect.Value if not found
 func getFieldByNameCaseInsensitive(val reflect.Value, name string) reflect.Value {
-	// If it's a map with string keys, try to find a case-insensitive key match
+	// If it's a map with string keys, use our getMapValue helper
 	if val.Kind() == reflect.Map && val.Type().Key().Kind() == reflect.String {
-		for _, key := range val.MapKeys() {
-			if strings.EqualFold(key.String(), name) {
-				return val.MapIndex(key)
-			}
-		}
-		return reflect.Value{}
+		return getMapValue(val, name)
 	}
 
 	// Otherwise, for structs, match field names case-insensitively
@@ -1246,4 +1266,24 @@ func (ne *NotExpression) Evaluate(item reflect.Value) (bool, error) {
 		return false, err
 	}
 	return !result, nil
+}
+
+// getMapValue returns the map value for a key (case-insensitive match)
+func getMapValue(mapValue reflect.Value, key string) reflect.Value {
+	// If it's a map with string keys, try to find a case-insensitive key match
+	if mapValue.Kind() == reflect.Map && mapValue.Type().Key().Kind() == reflect.String {
+		for _, mapKey := range mapValue.MapKeys() {
+			if strings.EqualFold(mapKey.String(), key) {
+				value := mapValue.MapIndex(mapKey)
+				
+				// Handle interface{} values
+				if value.Kind() == reflect.Interface {
+					value = value.Elem()
+				}
+				
+				return value
+			}
+		}
+	}
+	return reflect.Value{}
 }

@@ -73,7 +73,11 @@ The benchmark tests evaluate the parser's performance across different query typ
    - Added validation for unclosed strings in the enhanced lexer
    - Added dedicated test cases to ensure detection of unclosed strings
    - Modified the parser to properly handle ILLEGAL tokens from the lexer
-2. Improve map field access functionality
+2. ✅ Improve map field access functionality
+   - Enhanced map field access to work with nested maps
+   - Added support for interface{} types in maps
+   - Implemented case-insensitive map key lookups
+   - Added comprehensive tests including deeply nested map structures
 3. Add better handling for non-existent fields
 4. Add validation for numeric values in comparisons
 5. Consider adding more operators (e.g., LIKE, IN) for additional functionality
