@@ -107,6 +107,18 @@ func Test_main(t *testing.T) {
 		query:  `NonExistentField = 'test'`,
 		expRes: 0,
 	}
+	tm[16] = test{
+		query:  `(Age = 25 OR Age = 30) AND Address.City = 'Anytown'`,
+		expRes: 2, // Bob (25) and Alice (30) both in Anytown
+	}
+	tm[17] = test{
+		query:  `Age = 25 OR Age = 30`,
+		expRes: 2, // Bob (25) and Alice (30)
+	}
+	tm[18] = test{
+		query:  `Age = 25 OR (Age = 30 AND Address.City = 'Anytown')`,
+		expRes: 2, // Bob (25) or Alice (30, Anytown)
+	}
 
 	for _, q := range tm {
 		t.Logf("Query: %s\n", q.query)
