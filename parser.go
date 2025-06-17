@@ -76,6 +76,10 @@ type OrExpression struct {
 
 func Parse[T any](query string, data []T) ([]T, error) {
 	// Use the enhanced lexer that supports negative numbers
+	if query == "" {
+		return data, nil
+	}
+
 	l := NewEnhancedLexer(query)
 	p := NewParser(l)
 
@@ -131,12 +135,12 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 				}
 				val = val.Elem()
 			}
-			
+
 			// Handle interface{} values by getting the underlying value
 			if val.Kind() == reflect.Interface {
 				val = val.Elem()
 			}
-			
+
 			if val.Kind() == reflect.Slice {
 				for j := 0; j < val.Len(); j++ {
 					elem := val.Index(j)
@@ -146,12 +150,12 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 						}
 						elem = elem.Elem()
 					}
-					
+
 					// Handle interface{} values in slices
 					if elem.Kind() == reflect.Interface {
 						elem = elem.Elem()
 					}
-					
+
 					if elem.Kind() == reflect.Struct || elem.Kind() == reflect.Map {
 						field := getFieldByNameCaseInsensitive(elem, part)
 						if field.IsValid() {
@@ -177,7 +181,7 @@ func getFieldValues(item reflect.Value, fieldPath string) ([]reflect.Value, erro
 					// Only string keys can be accessed by field path
 					continue
 				}
-				
+
 				// Try to find the key case-insensitively
 				mapValue := getMapValue(val, part)
 				if mapValue.IsValid() {
@@ -231,7 +235,7 @@ func (ce *ComparisonExpression) Evaluate(item reflect.Value) (bool, error) {
 	if err != nil || len(fieldValues) == 0 {
 		return false, nil // If field is missing or not found, do not match
 	}
-	
+
 	var lastError error
 	for _, fieldValue := range fieldValues {
 		match, err := ce.compareValue(fieldValue)
@@ -243,12 +247,12 @@ func (ce *ComparisonExpression) Evaluate(item reflect.Value) (bool, error) {
 			return true, nil
 		}
 	}
-	
+
 	// If we had errors and no successful matches, return the last error
 	if lastError != nil {
 		return false, lastError
 	}
-	
+
 	return false, nil
 }
 
@@ -771,7 +775,7 @@ type Parser struct {
 
 	currentToken Token
 	peekToken    Token
-	lastToken    Token  // Track the last token for validation
+	lastToken    Token // Track the last token for validation
 	errors       []string
 }
 
@@ -835,7 +839,7 @@ func (p *Parser) ParseQuery() (Expression, error) {
 	if p.currentToken.Type != EOF && len(p.errors) == 0 {
 		p.errors = append(p.errors, "unexpected token after end of query")
 	}
-		// We'll handle this specific case in the compareValue method
+	// We'll handle this specific case in the compareValue method
 
 	if len(p.errors) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(p.errors, "; "))
@@ -1092,27 +1096,27 @@ func (p *Parser) parseComparisonWithField(field string) (*ComparisonExpression, 
 	}
 
 	p.nextToken()
-	
+
 	// Get the value
 	expr.Value = p.currentToken.Literal
-	
+
 	// Check if there's an identifier right after a number (e.g. "25abc") which would indicate an invalid number
 	if p.currentToken.Type == NUMBER && p.peekToken.Type == IDENTIFIER {
 		return nil, fmt.Errorf("invalid numeric value: %s%s", p.currentToken.Literal, p.peekToken.Literal)
 	}
-	
+
 	// Validate numeric values
 	if p.currentToken.Type == NUMBER {
 		// Check if this number is for a numeric field (implicit check, we'll validate during evaluation)
 		// We still want to ensure the number itself is valid
-		
+
 		// Check for common numeric format errors
-		if strings.ContainsAny(expr.Value, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") && 
-		   !strings.ContainsAny(expr.Value, "eE") { // Allow 'e' for scientific notation
+		if strings.ContainsAny(expr.Value, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") &&
+			!strings.ContainsAny(expr.Value, "eE") { // Allow 'e' for scientific notation
 			return nil, fmt.Errorf("invalid numeric value: %s", expr.Value)
 		}
 	}
-	
+
 	p.nextToken() // Always advance after reading the value
 
 	return expr, nil
@@ -1323,12 +1327,12 @@ func getMapValue(mapValue reflect.Value, key string) reflect.Value {
 		for _, mapKey := range mapValue.MapKeys() {
 			if strings.EqualFold(mapKey.String(), key) {
 				value := mapValue.MapIndex(mapKey)
-				
+
 				// Handle interface{} values
 				if value.Kind() == reflect.Interface {
 					value = value.Elem()
 				}
-				
+
 				return value
 			}
 		}
