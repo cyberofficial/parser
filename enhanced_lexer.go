@@ -34,6 +34,14 @@ func (l *EnhancedLexer) peekChar() byte {
 	return l.input[l.readPosition]
 }
 
+// peekTwoChars returns the character two positions ahead
+func peekTwoChars(l *EnhancedLexer) byte {
+	if l.readPosition+1 >= len(l.input) {
+		return 0
+	}
+	return l.input[l.readPosition+1]
+}
+
 func (l *EnhancedLexer) NextToken() Token {
 	var tok Token
 
@@ -71,10 +79,18 @@ func (l *EnhancedLexer) NextToken() Token {
 		}
 	case '(':
 		tok = newToken(LPAREN, l.ch)
-	case ')':
-		tok = newToken(RPAREN, l.ch)
+	case ')':		tok = newToken(RPAREN, l.ch)
 	case ',':
-		tok = newToken(COMMA, l.ch)
+		// Check if this comma is between digits, which would make it part of a number
+		if isDigit(l.peekChar()) && l.position > 0 && isDigit(l.input[l.position-1]) {
+			tok.Type = NUMBER
+			tok.Literal = l.readNumber()
+			// Include the comma in the literal
+			tok.Literal = "," + tok.Literal
+			return tok
+		} else {
+			tok = newToken(COMMA, l.ch)
+		}
 	case '\'':
 		tok.Type = STRING
 		tok.Literal = l.readString()
@@ -135,15 +151,46 @@ func (l *EnhancedLexer) readNumber() string {
 	if l.ch == '-' {
 		l.readChar()
 	}
-	for isDigit(l.ch) {
+	
+	// Read integer part, allowing commas for readability (e.g., 1,000,000)
+	hasDigits := false
+	for isDigit(l.ch) || l.ch == ',' {
+		if isDigit(l.ch) {
+			hasDigits = true
+		}
 		l.readChar()
 	}
+	
+	if !hasDigits {
+		// Ensure we have at least one digit
+		return l.input[position:l.position]
+	}
+	
+	// Read decimal part if present
 	if l.ch == '.' && isDigit(l.peekChar()) {
-		l.readChar()
+		l.readChar() // Read '.'
 		for isDigit(l.ch) {
 			l.readChar()
 		}
 	}
+	
+	// Read scientific notation if present (e.g., 1.23e45, 1e10)
+	if (l.ch == 'e' || l.ch == 'E') && (isDigit(l.peekChar()) || 
+		((l.peekChar() == '+' || l.peekChar() == '-') && isDigit(peekTwoChars(l)))) {
+		
+		l.readChar() // Read 'e' or 'E'
+		
+		// Read sign if present
+		if l.ch == '+' || l.ch == '-' {
+			l.readChar()
+		}
+		
+		// Read exponent
+		for isDigit(l.ch) {
+			l.readChar()
+		}
+	}
+	
 	return l.input[position:l.position]
 }
 

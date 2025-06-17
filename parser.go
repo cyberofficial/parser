@@ -104,10 +104,10 @@ func Parse[T any](query string, data []T) ([]T, error) {
 		if val.Kind() != reflect.Struct {
 			return nil, fmt.Errorf("expected slice of structs, got %s in data", val.Kind())
 		}
-
 		match, err := ast.Evaluate(val)
 		if err != nil {
-			continue
+			// Return the evaluation error immediately as it's a validation issue
+			return nil, fmt.Errorf("evaluation error: %w", err)
 		}
 
 		if match {
@@ -231,12 +231,24 @@ func (ce *ComparisonExpression) Evaluate(item reflect.Value) (bool, error) {
 	if err != nil || len(fieldValues) == 0 {
 		return false, nil // If field is missing or not found, do not match
 	}
+	
+	var lastError error
 	for _, fieldValue := range fieldValues {
-		match, _ := ce.compareValue(fieldValue)
+		match, err := ce.compareValue(fieldValue)
+		if err != nil {
+			lastError = err
+			continue // Try other values if this one fails
+		}
 		if match {
 			return true, nil
 		}
 	}
+	
+	// If we had errors and no successful matches, return the last error
+	if lastError != nil {
+		return false, lastError
+	}
+	
 	return false, nil
 }
 
@@ -276,7 +288,12 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 			return fieldValue.Interface().(bool) != b, nil
 		}
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v, _ := strconv.ParseInt(ce.Value, 10, 64)
+		// Remove any commas from the number string (common with large numbers)
+		cleanValue := strings.ReplaceAll(ce.Value, ",", "")
+		v, err := strconv.ParseInt(cleanValue, 10, 64)
+		if err != nil {
+			return false, fmt.Errorf("invalid integer value '%s' for comparison with field '%s': %w", ce.Value, ce.Field, err)
+		}
 		fv := fieldValue.Int()
 		switch ce.Operator {
 		case EQ:
@@ -293,7 +310,12 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 			return fv >= v, nil
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v, _ := strconv.ParseUint(ce.Value, 10, 64)
+		// Remove any commas from the number string (common with large numbers)
+		cleanValue := strings.ReplaceAll(ce.Value, ",", "")
+		v, err := strconv.ParseUint(cleanValue, 10, 64)
+		if err != nil {
+			return false, fmt.Errorf("invalid unsigned integer value '%s' for comparison with field '%s': %w", ce.Value, ce.Field, err)
+		}
 		fv := fieldValue.Uint()
 		switch ce.Operator {
 		case EQ:
@@ -310,7 +332,12 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 			return fv >= v, nil
 		}
 	case reflect.Float32, reflect.Float64:
-		v, _ := strconv.ParseFloat(ce.Value, 64)
+		// Remove any commas from the number string (common with large numbers)
+		cleanValue := strings.ReplaceAll(ce.Value, ",", "")
+		v, err := strconv.ParseFloat(cleanValue, 64)
+		if err != nil {
+			return false, fmt.Errorf("invalid floating point value '%s' for comparison with field '%s': %w", ce.Value, ce.Field, err)
+		}
 		fv := fieldValue.Float()
 		switch ce.Operator {
 		case EQ:
@@ -744,6 +771,7 @@ type Parser struct {
 
 	currentToken Token
 	peekToken    Token
+	lastToken    Token  // Track the last token for validation
 	errors       []string
 }
 
@@ -804,10 +832,10 @@ func (p *Parser) ParseQuery() (Expression, error) {
 			p.nextToken()
 		}
 	}
-
 	if p.currentToken.Type != EOF && len(p.errors) == 0 {
 		p.errors = append(p.errors, "unexpected token after end of query")
 	}
+		// We'll handle this specific case in the compareValue method
 
 	if len(p.errors) > 0 {
 		return nil, fmt.Errorf("%s", strings.Join(p.errors, "; "))
@@ -1064,7 +1092,27 @@ func (p *Parser) parseComparisonWithField(field string) (*ComparisonExpression, 
 	}
 
 	p.nextToken()
+	
+	// Get the value
 	expr.Value = p.currentToken.Literal
+	
+	// Check if there's an identifier right after a number (e.g. "25abc") which would indicate an invalid number
+	if p.currentToken.Type == NUMBER && p.peekToken.Type == IDENTIFIER {
+		return nil, fmt.Errorf("invalid numeric value: %s%s", p.currentToken.Literal, p.peekToken.Literal)
+	}
+	
+	// Validate numeric values
+	if p.currentToken.Type == NUMBER {
+		// Check if this number is for a numeric field (implicit check, we'll validate during evaluation)
+		// We still want to ensure the number itself is valid
+		
+		// Check for common numeric format errors
+		if strings.ContainsAny(expr.Value, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") && 
+		   !strings.ContainsAny(expr.Value, "eE") { // Allow 'e' for scientific notation
+			return nil, fmt.Errorf("invalid numeric value: %s", expr.Value)
+		}
+	}
+	
 	p.nextToken() // Always advance after reading the value
 
 	return expr, nil

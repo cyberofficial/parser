@@ -612,6 +612,104 @@ func TestUnclosedStringDetection(t *testing.T) {
 	}
 }
 
+func TestNumericValidation(t *testing.T) {
+	people := []Person{
+		{Name: "Alice", Age: 30, Salary: 75000.50},
+		{Name: "Bob", Age: 25, Salary: 65000.25},
+	}
+
+	tests := []struct {
+		name        string
+		query       string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "Valid integer comparison",
+			query:       "Age > 20",
+			expectError: false,
+		},
+		{
+			name:        "Valid float comparison",
+			query:       "Salary > 70000.00",
+			expectError: false,
+		},
+		{
+			name:        "Invalid integer - non-numeric",
+			query:       "Age = 'thirty'",
+			expectError: true,
+			errorMsg:    "invalid integer value",
+		}, {
+			name:        "Invalid integer - alphabetic characters",
+			query:       "Age > 25abc",
+			expectError: true,
+			errorMsg:    "invalid numeric value",
+		},
+		{
+			name:        "Invalid float - non-numeric",
+			query:       "Salary = 'seventy-five thousand'",
+			expectError: true,
+			errorMsg:    "invalid floating point value",
+		}, {
+			name:        "Valid float with commas",
+			query:       "Salary > 65,000.25",
+			expectError: false,
+		},
+		{
+			name:        "Valid negative integer",
+			query:       "Age > -10",
+			expectError: false,
+		},
+		{
+			name:        "Valid scientific notation",
+			query:       "Salary > 7.5e4",
+			expectError: false,
+		},
+		{
+			name:        "Valid zero",
+			query:       "Age > 0",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.query, people)
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error for query '%s', but got none", tt.query)
+			} else if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error for query '%s': %v", tt.query, err)
+			}
+
+			if tt.expectError && err != nil {
+				if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error message to contain '%s', but got: %v", tt.errorMsg, err)
+				}
+			}
+		})
+	}
+}
+
+func TestNumericValidationErrors(t *testing.T) {
+	type Item struct {
+		Age int
+	}
+
+	items := []Item{
+		{Age: 25},
+	}
+
+	// Test an obviously invalid numeric format - typos like "25abc"
+	input := "Age = 25abc"
+	_, err := Parse(input, items)
+
+	if err == nil {
+		t.Errorf("Expected an error for invalid numeric format '%s', but got none", input)
+	} else {
+		t.Logf("Got expected error for '%s': %v", input, err)
+	}
+}
+
 // Helper function to get names for debugging
 func getNames(people []Person) []string {
 	names := make([]string, len(people))
