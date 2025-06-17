@@ -67,15 +67,15 @@ func (l *EnhancedLexer) NextToken() Token {
 		} else {
 			tok = newToken(GT, l.ch)
 		}
-	case '(': 
+	case '(':
 		tok = newToken(LPAREN, l.ch)
-	case ')': 
+	case ')':
 		tok = newToken(RPAREN, l.ch)
 	case '\'':
 		tok.Type = STRING
 		tok.Literal = l.readString()
 		return tok
-	case '-': 
+	case '-':
 		// Check if it's a negative number
 		if isDigit(l.peekChar()) {
 			tok.Type = NUMBER

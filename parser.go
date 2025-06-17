@@ -374,8 +374,6 @@ func (p *Parser) currentTokenIs(t TokenType) bool {
 	return p.currentToken.Type == t
 }
 
-
-
 func (p *Parser) ParseQuery() (Expression, error) {
 	// Handle empty query
 	if p.currentToken.Type == EOF {
@@ -486,7 +484,7 @@ func (p *Parser) parsePrimary() Expression {
 
 		if p.currentTokenIs(RPAREN) {
 			p.nextToken()
-		} else {			// Handle special case where we might have hit EOF after string
+		} else { // Handle special case where we might have hit EOF after string
 			// We can no longer check the last character of the input
 			if p.currentToken.Type == EOF {
 				// Just assume there's a missing closing parenthesis
@@ -553,8 +551,6 @@ func (p *Parser) parseComparisonWithField(field string) (*ComparisonExpression, 
 	return expr, nil
 }
 
-
-
 type Lexer struct {
 	input        string
 	position     int
@@ -616,10 +612,11 @@ func (l *Lexer) NextToken() Token {
 			ch := l.ch
 			l.readChar()
 			literal := string(ch) + string(l.ch)
-			tok = Token{Type: GE, Literal: literal}    } else {
-        tok = newToken(GT, l.ch)
-    }
-    case '(': // Add LPAREN
+			tok = Token{Type: GE, Literal: literal}
+		} else {
+			tok = newToken(GT, l.ch)
+		}
+	case '(': // Add LPAREN
 		tok = newToken(LPAREN, l.ch)
 	case ')': // Add RPAREN
 		tok = newToken(RPAREN, l.ch)
@@ -627,7 +624,7 @@ func (l *Lexer) NextToken() Token {
 		tok.Type = STRING
 		tok.Literal = l.readString()
 		return tok
-	case '-': 
+	case '-':
 		// Check if it's a negative number
 		if isDigit(l.peekChar()) {
 			tok.Type = NUMBER

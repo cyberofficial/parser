@@ -55,15 +55,15 @@ func Test_complex_parentheses_queries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := NewParser(NewLexer(tc.query))
 			expr, err := p.ParseQuery()
-			
+
 			if tc.wantErr && err == nil {
 				t.Errorf("Expected error for query %q, got nil", tc.query)
 			}
-			
+
 			if !tc.wantErr && err != nil {
 				t.Errorf("Unexpected error for query %q: %v", tc.query, err)
 			}
-			
+
 			if !tc.wantErr && expr != nil {
 				gotType := fmt.Sprintf("%T", expr)
 				if gotType != tc.wantType {

@@ -9,14 +9,14 @@ func Test_unicode_support(t *testing.T) {
 	type Item struct {
 		Name string
 	}
-	
+
 	items := []Item{
 		{Name: "こんにちは"}, // Hello in Japanese
-		{Name: "你好"},      // Hello in Chinese
-		{Name: "안녕하세요"},  // Hello in Korean
-		{Name: "Hello"},    // Hello in English
+		{Name: "你好"},    // Hello in Chinese
+		{Name: "안녕하세요"}, // Hello in Korean
+		{Name: "Hello"}, // Hello in English
 	}
-	
+
 	tests := []struct {
 		name     string
 		query    string
@@ -48,7 +48,7 @@ func Test_unicode_support(t *testing.T) {
 			expected: 0,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := Parse(tt.query, items)
@@ -67,22 +67,22 @@ func Test_deeply_nested_fields(t *testing.T) {
 	type Level4 struct {
 		Value string
 	}
-	
+
 	type Level3 struct {
 		Level4 Level4
 		Value  string
 	}
-	
+
 	type Level2 struct {
 		Level3 Level3
 		Value  string
 	}
-	
+
 	type Level1 struct {
 		Level2 Level2
 		Value  string
 	}
-	
+
 	items := []Level1{
 		{
 			Value: "level1",
@@ -97,7 +97,7 @@ func Test_deeply_nested_fields(t *testing.T) {
 			},
 		},
 	}
-	
+
 	tests := []struct {
 		name     string
 		query    string
@@ -134,7 +134,7 @@ func Test_deeply_nested_fields(t *testing.T) {
 			expected: 0,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := Parse(tt.query, items)
@@ -157,16 +157,16 @@ func Test_is_null_operator(t *testing.T) {
 		Tags        []string
 		Metadata    map[string]string
 	}
-	
+
 	desc1 := "Item 1"
 	desc2 := "Item 2"
-	
+
 	items := []ItemWithNulls{
 		{ID: 1, Name: "Item 1", Description: &desc1, Tags: []string{"tag1"}, Metadata: map[string]string{"key": "value"}},
 		{ID: 2, Name: "Item 2", Description: &desc2, Tags: []string{}, Metadata: nil},
 		{ID: 3, Name: "Item 3", Description: nil, Tags: nil, Metadata: map[string]string{}},
 	}
-	
+
 	tests := []struct {
 		name     string
 		query    string
@@ -175,40 +175,40 @@ func Test_is_null_operator(t *testing.T) {
 		{
 			name:     "IS NULL on nil pointer",
 			query:    "Description IS NULL",
-			expected: 1,  // Only Item 3
+			expected: 1, // Only Item 3
 		},
 		{
 			name:     "IS NOT NULL on pointer",
 			query:    "Description IS NOT NULL",
-			expected: 2,  // Item 1 and Item 2
+			expected: 2, // Item 1 and Item 2
 		},
 		{
 			name:     "IS NULL on empty slice",
 			query:    "Tags IS NULL",
-			expected: 2,  // Item 2 (empty slice) and Item 3 (nil slice)
+			expected: 2, // Item 2 (empty slice) and Item 3 (nil slice)
 		},
 		{
 			name:     "IS NOT NULL on non-empty slice",
 			query:    "Tags IS NOT NULL",
-			expected: 1,  // Only Item 1
+			expected: 1, // Only Item 1
 		},
 		{
 			name:     "IS NULL on nil map",
 			query:    "Metadata IS NULL",
-			expected: 1,  // Only Item 2
+			expected: 1, // Only Item 2
 		},
 		{
 			name:     "IS NULL on empty map",
 			query:    "Metadata IS NULL",
-			expected: 1,  // Item 2 (nil map) considered null
+			expected: 1, // Item 2 (nil map) considered null
 		},
 		{
 			name:     "IS NOT NULL on map",
 			query:    "Metadata IS NOT NULL",
-			expected: 2,  // Item 1 and Item 3
+			expected: 2, // Item 1 and Item 3
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := Parse(tt.query, items)
@@ -227,14 +227,14 @@ func Test_quotes_in_strings(t *testing.T) {
 	type StringItem struct {
 		Value string
 	}
-	
+
 	items := []StringItem{
 		{Value: "No special chars"},
 		{Value: "Contains 'single quotes'"},
 		{Value: "Contains \"double quotes\""},
 		{Value: "Contains 'mixed \"quotes\"'"},
 	}
-	
+
 	tests := []struct {
 		name     string
 		query    string
@@ -251,7 +251,7 @@ func Test_quotes_in_strings(t *testing.T) {
 			expected: 1,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := Parse(tt.query, items)

@@ -26,7 +26,7 @@ func TestMissingClosingParen(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to parse balanced query: %v", err)
 	}
-	
+
 	// Verify we got an expression of the correct type
 	if _, ok := expr.(*OrExpression); !ok {
 		t.Errorf("Expected OrExpression, got %T", expr)
