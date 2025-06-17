@@ -71,6 +71,8 @@ func (l *EnhancedLexer) NextToken() Token {
 		tok = newToken(LPAREN, l.ch)
 	case ')':
 		tok = newToken(RPAREN, l.ch)
+	case ',':
+		tok = newToken(COMMA, l.ch)
 	case '\'':
 		tok.Type = STRING
 		tok.Literal = l.readString()
