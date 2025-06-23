@@ -77,7 +77,7 @@ type OrExpression struct {
 func Parse[T any](query string, data []T) ([]T, error) {
 	// Use the enhanced lexer that supports negative numbers
 	if query == "" {
-		return data, nil
+		return nil, fmt.Errorf("empty query not allowed")
 	}
 
 	l := NewEnhancedLexer(query)
@@ -94,13 +94,14 @@ func Parse[T any](query string, data []T) ([]T, error) {
 		return nil, fmt.Errorf("failed to parse query: AST is nil")
 	}
 
-	filteredData := []T{}
+	filteredData := make([]T, 0, len(data))
 
 	for _, item := range data {
 		val := reflect.ValueOf(item)
 		if val.Kind() == reflect.Ptr && val.IsNil() {
 			continue
 		}
+
 		if val.Kind() == reflect.Ptr {
 			val = val.Elem() // Dereference if it's a pointer to a struct
 		}
@@ -108,6 +109,7 @@ func Parse[T any](query string, data []T) ([]T, error) {
 		if val.Kind() != reflect.Struct {
 			return nil, fmt.Errorf("expected slice of structs, got %s in data", val.Kind())
 		}
+
 		match, err := ast.Evaluate(val)
 		if err != nil {
 			// Return the evaluation error immediately as it's a validation issue
