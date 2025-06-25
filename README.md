@@ -3,7 +3,6 @@
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/zveinn/parser)
 ![GitHub Issues](https://img.shields.io/github/issues/zveinn/parser)
 ![GitHub Stars](https://img.shields.io/github/stars/zveinn/parser?style=social)
-![Build Status](https://img.shields.io/github/workflow/status/zveinn/parser/Go)
 
 **Parser** is a lightweight, efficient Go library for filtering slices of structs using a SQL-like query language. It enables in-memory data filtering without a database, ideal for applications like data processing, configuration management, or API response filtering. Built with Go generics, it offers type-safe queries and supports complex expressions, nested fields, and case-insensitive matching.
 
