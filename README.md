@@ -145,22 +145,6 @@ The parser supports advanced numeric formats:
 - Scientific notation: `Salary > 7.5e4`
 - Comma-separated numbers: `Salary > 1,000,000.50`
 
-#### Configuration
-Use the `parser.Config` struct to customize parsing behavior:
-
-```go
-cfg := parser.Config{
-    Debug:         true,  // Enable debug logging
-    MaxQueryLength: 1000, // Limit query length
-}
-results, err := parser.ParseWithConfig("Age > 25", people, cfg)
-```
-
-| Option           | Type   | Description                          | Default |
-|------------------|--------|--------------------------------------|---------|
-| `Debug`          | `bool` | Enable verbose logging for debugging | `false` |
-| `MaxQueryLength` | `int`  | Maximum allowed query length         | `10000` |
-
 ### Performance Considerations
 Based on benchmark results:
 - **Efficient for Small to Medium Datasets**: Queries on datasets of 10–1000 structs are fast, with simple queries (e.g., `Age > 30`) taking microseconds.
