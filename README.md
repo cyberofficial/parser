@@ -215,7 +215,7 @@ This project is licensed under the Apache 2.0 License. See [LICENSE](LICENSE) fo
 ## 🌟 Acknowledgements
 
 - Built by [zveinn](https://github.com/zveinn).
-- Inspired by SQL query engines and libraries like [squirrel](https://github.com/Masterminds/squirrel).
+- Inspired by SQL query engines and libraries like [rql](https://github.com/dvaldivia/rql).
 - Thanks to the Go community for feedback and inspiration.
 
 ---
