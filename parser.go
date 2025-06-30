@@ -77,7 +77,7 @@ type OrExpression struct {
 func Parse[T any](query string, data []T) ([]T, error) {
 	// Use the enhanced lexer that supports negative numbers
 	if query == "" {
-		return nil, fmt.Errorf("empty query not allowed")
+		return data, nil
 	}
 
 	l := NewEnhancedLexer(query)
