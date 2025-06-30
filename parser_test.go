@@ -325,12 +325,12 @@ func TestEmptyQuery(t *testing.T) {
 
 	// The parser returns an error for empty queries, which is expected behavior
 	results, err := Parse("", people)
-	if err == nil {
-		t.Fatalf("Expected error for empty query but got none")
+	if err != nil {
+		t.Fatalf("Expected no error for empty query but got one %s", err)
 	}
 
 	// The error should mention that the AST is nil
-	if results != nil {
+	if len(results) != len(people) {
 		t.Errorf("Empty query should return nil results, got %v", results)
 	}
 }
@@ -639,7 +639,8 @@ func TestNumericValidation(t *testing.T) {
 			query:       "Age = 'thirty'",
 			expectError: true,
 			errorMsg:    "invalid integer value",
-		}, {
+		},
+		{
 			name:        "Invalid integer - alphabetic characters",
 			query:       "Age > 25abc",
 			expectError: true,
@@ -650,7 +651,8 @@ func TestNumericValidation(t *testing.T) {
 			query:       "Salary = 'seventy-five thousand'",
 			expectError: true,
 			errorMsg:    "invalid floating point value",
-		}, {
+		},
+		{
 			name:        "Valid float with commas",
 			query:       "Salary > 65,000.25",
 			expectError: false,
@@ -705,8 +707,6 @@ func TestNumericValidationErrors(t *testing.T) {
 
 	if err == nil {
 		t.Errorf("Expected an error for invalid numeric format '%s', but got none", input)
-	} else {
-		t.Logf("Got expected error for '%s': %v", input, err)
 	}
 }
 
