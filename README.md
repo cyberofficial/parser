@@ -11,6 +11,7 @@
 - **SQL-Like Query Language**: Filter structs with intuitive queries (e.g., `Age > 25 AND Skills CONTAINS 'Go'`).
 - **Type-Safe with Generics**: Works with any struct type using Go’s generics.
 - **Nested Field Access**: Query nested structs and maps using dot notation (e.g., `Department.Name`).
+- **Humanized Values Support**: Parse human-readable values like `10GB`, `1.5K`, `2TB`, `1,000` automatically.
 - **Rich Operators**: Supports `=`, `!=`, `<`, `>`, `<=`, `>=`, `CONTAINS`, `IS NULL`, `ANY`, `NOT`, `AND`, `OR`.
 - **Case-Insensitive Matching**: Field names and keywords (e.g., `AND`, `OR`) are case-insensitive.
 - **Efficient Parsing**: Uses an enhanced lexer with support for negative numbers, scientific notation, and comma-separated numbers.
@@ -143,6 +144,48 @@ The parser supports advanced numeric formats:
 - Negative numbers: `Salary > -1000`
 - Scientific notation: `Salary > 7.5e4`
 - Comma-separated numbers: `Salary > 1,000,000.50`
+
+#### Humanized Values
+The parser automatically converts humanized values to their numeric equivalents:
+
+**Byte Sizes:**
+```sql
+Drive.Size > 10GB        # Converts to 10000000000
+Memory > 1.5TB           # Converts to 1500000000000
+Storage < 500MB          # Converts to 500000000
+Backup > 2.5GiB          # Converts to 2684354560 (binary units)
+```
+
+**SI Prefixes:**
+```sql
+Population > 1.5M        # Converts to 1500000
+Count < 5K               # Converts to 5000
+Records >= 2.3G          # Converts to 2300000000
+```
+
+**Comma-Separated Numbers:**
+```sql
+Price > 1,000,000        # Converts to 1000000
+Users >= 50,000          # Converts to 50000
+```
+
+**Example with Real Data:**
+```go
+type Server struct {
+    Name   string
+    Memory int64  // in bytes
+    Storage int64 // in bytes
+}
+
+servers := []Server{
+    {Name: "web1", Memory: 8589934592, Storage: 536870912000},    // 8GB, 500GB
+    {Name: "db1", Memory: 34359738368, Storage: 2199023255552},   // 32GB, 2TB
+}
+
+// Query using humanized values
+results, _ := parser.Parse("Memory > 16GB AND Storage < 1TB", servers)
+// Returns only the web1 server
+```
 
 ### Performance Considerations
 Based on benchmark results:
