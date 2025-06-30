@@ -11,7 +11,7 @@
 - **SQL-Like Query Language**: Filter structs with intuitive queries (e.g., `Age > 25 AND Skills CONTAINS 'Go'`).
 - **Type-Safe with Generics**: Works with any struct type using Go’s generics.
 - **Nested Field Access**: Query nested structs and maps using dot notation (e.g., `Department.Name`).
-- **Humanized Values Support**: Parse human-readable values like `10GB`, `1.5K`, `2TB`, `1,000` automatically.
+- **Humanized Values Support**: Parse human-readable values like `10GB`/`10GiB`, `1.5K`, `2TB`/`2TiB`, `1,000` automatically.
 - **Rich Operators**: Supports `=`, `!=`, `<`, `>`, `<=`, `>=`, `CONTAINS`, `IS NULL`, `ANY`, `NOT`, `AND`, `OR`.
 - **Case-Insensitive Matching**: Field names and keywords (e.g., `AND`, `OR`) are case-insensitive.
 - **Efficient Parsing**: Uses an enhanced lexer with support for negative numbers, scientific notation, and comma-separated numbers.
@@ -148,12 +148,19 @@ The parser supports advanced numeric formats:
 #### Humanized Values
 The parser automatically converts humanized values to their numeric equivalents:
 
-**Byte Sizes:**
+**Byte Sizes (Decimal and Binary Units):**
 ```sql
-Drive.Size > 10GB        # Converts to 10000000000
-Memory > 1.5TB           # Converts to 1500000000000
-Storage < 500MB          # Converts to 500000000
-Backup > 2.5GiB          # Converts to 2684354560 (binary units)
+# Decimal units (powers of 1000)
+Drive.Size > 10GB        # Converts to 10,000,000,000 bytes
+Memory > 1.5TB           # Converts to 1,500,000,000,000 bytes  
+Storage < 500MB          # Converts to 500,000,000 bytes
+Buffer < 100KB           # Converts to 100,000 bytes
+
+# Binary units (powers of 1024)  
+Backup > 2.5GiB          # Converts to 2,684,354,560 bytes
+Cache > 512MiB           # Converts to 536,870,912 bytes
+Temp < 100KiB            # Converts to 102,400 bytes
+Archive > 1TiB           # Converts to 1,099,511,627,776 bytes
 ```
 
 **SI Prefixes:**
@@ -172,9 +179,9 @@ Users >= 50,000          # Converts to 50000
 **Example with Real Data:**
 ```go
 type Server struct {
-    Name   string
-    Memory int64  // in bytes
-    Storage int64 // in bytes
+    Name    string
+    Memory  int64  // in bytes
+    Storage int64  // in bytes
 }
 
 servers := []Server{
@@ -182,9 +189,14 @@ servers := []Server{
     {Name: "db1", Memory: 34359738368, Storage: 2199023255552},   // 32GB, 2TB
 }
 
-// Query using humanized values
+// Query using decimal units (powers of 1000)
 results, _ := parser.Parse("Memory > 16GB AND Storage < 1TB", servers)
-// Returns only the web1 server
+
+// Query using binary units (powers of 1024) 
+results, _ := parser.Parse("Memory > 16GiB AND Storage < 1TiB", servers)
+
+// Both queries work and can be mixed
+results, _ := parser.Parse("Memory > 8GB AND Storage > 1TiB", servers)
 ```
 
 ### Performance Considerations
