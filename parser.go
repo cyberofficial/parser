@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/dustin/go-humanize"
 )
 
 type TokenType string
@@ -74,16 +76,20 @@ type OrExpression struct {
 	Expressions []Expression
 }
 
-func Parse[T any](query string, data []T) ([]T, error) {
+func Parse[T any](query string, data []T) (results []T, err error) {
 	// Use the enhanced lexer that supports negative numbers
 	if query == "" {
 		return data, nil
 	}
 
+	// Normalize humanized values in the query
+	query = normalizeHumanizedValues(query)
+
 	l := NewEnhancedLexer(query)
 	p := NewParser(l)
 
-	ast, err := p.ParseQuery()
+	var ast Expression
+	ast, err = p.ParseQuery()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse query: %w", err)
 	}
@@ -94,7 +100,7 @@ func Parse[T any](query string, data []T) ([]T, error) {
 		return nil, fmt.Errorf("failed to parse query: AST is nil")
 	}
 
-	filteredData := make([]T, 0, len(data))
+	results = make([]T, 0, len(data))
 
 	for _, item := range data {
 		val := reflect.ValueOf(item)
@@ -117,11 +123,11 @@ func Parse[T any](query string, data []T) ([]T, error) {
 		}
 
 		if match {
-			filteredData = append(filteredData, item)
+			results = append(results, item)
 		}
 	}
 
-	return filteredData, nil
+	return results, nil
 }
 
 // Enhanced getFieldValue: returns a slice of reflect.Value if a slice is encountered in the path
@@ -777,7 +783,6 @@ type Parser struct {
 
 	currentToken Token
 	peekToken    Token
-	lastToken    Token // Track the last token for validation
 	errors       []string
 }
 
@@ -1340,4 +1345,157 @@ func getMapValue(mapValue reflect.Value, key string) reflect.Value {
 		}
 	}
 	return reflect.Value{}
+}
+
+// normalizeHumanizedValues processes a query string and converts humanized values
+// (like "1.5K", "2.3MB") back to their original numeric values
+func normalizeHumanizedValues(query string) string {
+	if query == "" {
+		return query
+	}
+
+	var result strings.Builder
+	i := 0
+
+	for i < len(query) {
+		// Handle quoted strings - pass them through as-is
+		if query[i] == '\'' {
+			// Find the end of the quoted string
+			start := i
+			i++ // Skip opening quote
+
+			for i < len(query) && query[i] != '\'' {
+				// Handle escaped quotes
+				if query[i] == '\\' && i+1 < len(query) && query[i+1] == '\'' {
+					i += 2
+				} else {
+					i++
+				}
+			}
+
+			if i < len(query) {
+				i++ // Skip closing quote
+			}
+
+			// Write the entire quoted string as-is
+			result.WriteString(query[start:i])
+			continue
+		}
+
+		// Check if we're at the start of a potential humanized number
+		if isLetterOrDigit(query[i]) || query[i] == '.' {
+			tokenStart := i
+
+			// Read the token (identifier or number-like)
+			for i < len(query) && (isLetterOrDigit(query[i]) || query[i] == '.' || query[i] == ',') {
+				i++
+			}
+
+			token := query[tokenStart:i]
+			// Try to parse as humanized byte size (e.g., "10GB", "1.5MB")
+			// Only try this if the token contains letters (indicating a unit suffix)
+			if containsLetters(token) {
+				if bytes, err := humanize.ParseBytes(token); err == nil {
+					result.WriteString(fmt.Sprintf("%d", bytes))
+					continue
+				}
+			}
+
+			// Try to parse as humanized number with SI prefix (e.g., "1.5K", "2.3M")
+			if parsedFloat, err := parseHumanizedNumber(token); err == nil {
+				// Check if it's a whole number
+				if parsedFloat == float64(int64(parsedFloat)) {
+					result.WriteString(fmt.Sprintf("%d", int64(parsedFloat)))
+				} else {
+					result.WriteString(fmt.Sprintf("%g", parsedFloat))
+				}
+				continue
+			}
+
+			// Try to parse comma-separated numbers (e.g., "1,000", "1,234,567")
+			if parsedInt, err := parseCommaSeparatedNumber(token); err == nil {
+				result.WriteString(fmt.Sprintf("%d", parsedInt))
+				continue
+			}
+
+			// If not a humanized value, write the token as-is
+			result.WriteString(token)
+			continue
+		}
+
+		// For any other character, just copy it
+		result.WriteByte(query[i])
+		i++
+	}
+
+	return result.String()
+}
+
+// containsLetters checks if a string contains any alphabetic characters
+func containsLetters(s string) bool {
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			return true
+		}
+	}
+	return false
+}
+
+// isLetterOrDigit checks if a character is a letter or digit
+func isLetterOrDigit(ch byte) bool {
+	return isLetter(ch) || isDigit(ch)
+}
+
+// parseHumanizedNumber parses numbers with SI prefixes (K, M, G, T, etc.)
+func parseHumanizedNumber(s string) (float64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty string")
+	}
+
+	// Check for SI suffixes
+	suffixes := map[string]float64{
+		"K": 1e3, "k": 1e3,
+		"M": 1e6, "m": 1e6,
+		"G": 1e9, "g": 1e9,
+		"T": 1e12, "t": 1e12,
+		"P": 1e15, "p": 1e15,
+		"E": 1e18, "e": 1e18,
+	}
+
+	for suffix, multiplier := range suffixes {
+		if strings.HasSuffix(s, suffix) {
+			numStr := strings.TrimSuffix(s, suffix)
+			if num, err := strconv.ParseFloat(numStr, 64); err == nil {
+				return num * multiplier, nil
+			}
+		}
+	}
+
+	// Try to parse as regular number
+	if num, err := strconv.ParseFloat(s, 64); err == nil {
+		return num, nil
+	}
+
+	return 0, fmt.Errorf("not a valid humanized number: %s", s)
+}
+
+// parseCommaSeparatedNumber parses numbers with comma separators (e.g., "1,000", "1,234,567")
+// but NOT decimal numbers like "65000.25"
+func parseCommaSeparatedNumber(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty string")
+	}
+
+	// Only process if it contains commas AND does not contain decimal points
+	if strings.Contains(s, ",") && !strings.Contains(s, ".") {
+		// Remove commas and try to parse
+		cleaned := strings.ReplaceAll(s, ",", "")
+		if num, err := strconv.ParseInt(cleaned, 10, 64); err == nil {
+			return num, nil
+		}
+	}
+
+	return 0, fmt.Errorf("not a valid comma-separated number: %s", s)
 }
