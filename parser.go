@@ -241,7 +241,7 @@ func getFieldByNameCaseInsensitive(val reflect.Value, name string) reflect.Value
 func (ce *ComparisonExpression) Evaluate(item reflect.Value) (bool, error) {
 	fieldValues, err := getFieldValues(item, ce.Field)
 	if err != nil || len(fieldValues) == 0 {
-		return false, nil // If field is missing or not found, do not match
+		return false, fmt.Errorf("field '%s' not found", ce.Field)
 	}
 
 	var lastError error
@@ -460,7 +460,7 @@ func (ce *ConjunctionExpression) Evaluate(item reflect.Value) (bool, error) {
 	if allCmp {
 		fieldValues, err := getFieldValues(item, field)
 		if err != nil || len(fieldValues) == 0 {
-			return false, nil
+			return false, fmt.Errorf("field '%s' not found", field)
 		}
 
 		if fieldValues[0].Kind() == reflect.Slice {
@@ -504,7 +504,13 @@ func (ce *ConjunctionExpression) Evaluate(item reflect.Value) (bool, error) {
 			return false, nil
 		}
 		match, err := expr.Evaluate(item)
-		if err != nil || !match {
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				return false, err
+			}
+			return false, nil
+		}
+		if !match {
 			return false, nil
 		}
 	}
@@ -532,7 +538,7 @@ type IsNullExpression struct {
 func (e *IsNullExpression) Evaluate(item reflect.Value) (bool, error) {
 	fieldValues, err := getFieldValues(item, e.Field)
 	if err != nil || len(fieldValues) == 0 {
-		return !e.Not, nil // IS NULL: true if not found; IS NOT NULL: false if not found
+		return false, fmt.Errorf("field '%s' not found", e.Field)
 	}
 	for _, v := range fieldValues {
 		if v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
@@ -556,7 +562,7 @@ func (e *IsNullExpression) Evaluate(item reflect.Value) (bool, error) {
 func (ae *AnyExpression) Evaluate(item reflect.Value) (bool, error) {
 	fieldValues, err := getFieldValues(item, ae.Field)
 	if err != nil || len(fieldValues) == 0 {
-		return false, nil // If field is missing or not found, do not match
+		return false, fmt.Errorf("field '%s' not found", ae.Field)
 	}
 
 	// For each field value, check if any of the values match
