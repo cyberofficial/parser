@@ -718,3 +718,77 @@ func getNames(people []Person) []string {
 	}
 	return names
 }
+
+func TestMessageFieldParsing(t *testing.T) {
+	type RowWithMessage struct {
+		UserName string
+		Message  string
+	}
+
+	type RowWithMessages struct {
+		UserName string
+		Messages string
+	}
+
+	dataMessage := []RowWithMessage{
+		{UserName: "kyle", Message: "hello"},
+		{UserName: "alice", Message: "world"},
+	}
+	dataMessages := []RowWithMessages{
+		{UserName: "kyle", Messages: "1"},
+		{UserName: "bob", Messages: "2"},
+	}
+
+	tests := []struct {
+		name          string
+		query         string
+		data          interface{}
+		expectError   bool
+		expectedCount int
+	}{
+		// Queries on RowWithMessage
+		{"Error on wrong field 'Messages'", "UserName = 'kyle' AND NOT Messages CONTAINS '1'", dataMessage, true, 0},
+		{"Successful CONTAINS on 'Message'", "UserName = 'kyle' AND Message CONTAINS 'hell'", dataMessage, false, 1},
+		{"Successful equality on 'Message'", "UserName = 'alice' AND Message = 'world'", dataMessage, false, 1},
+		{"Error on wrong field 'Messages' with equality", "UserName = 'alice' AND Messages = '1'", dataMessage, true, 0},
+
+		// Queries on RowWithMessages
+		{"Successful CONTAINS on 'Messages'", "UserName = 'kyle' AND Messages CONTAINS '1'", dataMessages, false, 1},
+		{"Successful equality on 'Messages'", "UserName = 'bob' AND Messages = '2'", dataMessages, false, 1},
+		{"Error on wrong field 'Message' with CONTAINS", "UserName = 'bob' AND Message CONTAINS '2'", dataMessages, true, 0},
+		{"Error on wrong field 'Message' with equality", "UserName = 'bob' AND Message = '2'", dataMessages, true, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			var resultsLength int
+
+			switch data := tt.data.(type) {
+			case []RowWithMessage:
+				results, parseErr := Parse(tt.query, data)
+				err = parseErr
+				resultsLength = len(results)
+			case []RowWithMessages:
+				results, parseErr := Parse(tt.query, data)
+				err = parseErr
+				resultsLength = len(results)
+			default:
+				t.Fatalf("unsupported data type: %T", tt.data)
+			}
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected an error for query '%s', but got none", tt.query)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for query '%s': %v", tt.query, err)
+				}
+				if resultsLength != tt.expectedCount {
+					t.Errorf("Query '%s' returned %d results, expected %d", tt.query, resultsLength, tt.expectedCount)
+				}
+			}
+		})
+	}
+}
