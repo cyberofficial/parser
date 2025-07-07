@@ -21,9 +21,9 @@ func TestPotentialConflicts(t *testing.T) {
 			expected: "Count > 10000000",
 		},
 		{
-			name:     "10g should be SI prefix giga (10000000000), not a time unit",
+			name:     "10g should NOT be parsed as SI prefix (lowercase not supported)",
 			input:    "Count > 10g",
-			expected: "Count > 10000000000",
+			expected: "Count > 10g", // Should remain unchanged
 		},
 		{
 			name:     "10G should be SI prefix giga (10000000000), not bytes",
