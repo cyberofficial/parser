@@ -86,6 +86,46 @@ func TestNormalizeHumanizedValues(t *testing.T) {
 			input:    "Age > 25 AND Name = 'john'",
 			expected: "Age > 25 AND Name = 'john'",
 		},
+		{
+			name:     "Time duration seconds - unquoted",
+			input:    "Duration > 30s",
+			expected: "Duration > 30",
+		},
+		{
+			name:     "Time duration minutes - unquoted",
+			input:    "Timeout > 10m",
+			expected: "Timeout > 600",
+		},
+		{
+			name:     "Time duration hours - unquoted",
+			input:    "Uptime > 24h",
+			expected: "Uptime > 86400",
+		},
+		{
+			name:     "Time duration days - unquoted",
+			input:    "Age > 7d",
+			expected: "Age > 604800",
+		},
+		{
+			name:     "Time duration weeks - unquoted",
+			input:    "Period > 2w",
+			expected: "Period > 1209600",
+		},
+		{
+			name:     "Time duration years - unquoted",
+			input:    "Lifetime > 1y",
+			expected: "Lifetime > 31536000",
+		},
+		{
+			name:     "Time duration with decimal - unquoted",
+			input:    "Timeout > 1.5m",
+			expected: "Timeout > 90",
+		},
+		{
+			name:     "Mixed time and byte units",
+			input:    "Timeout > 10m AND Size > 1GB",
+			expected: "Timeout > 600 AND Size > 1000000000",
+		},
 	}
 
 	for _, tt := range tests {

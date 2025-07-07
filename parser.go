@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-
-	"github.com/dustin/go-humanize"
 )
 
 type TokenType string
@@ -1392,10 +1390,19 @@ func normalizeHumanizedValues(query string) string {
 			}
 
 			token := query[tokenStart:i]
-			// Try to parse as humanized byte size (e.g., "10GB", "1.5MB")
+			// Try to parse as time duration (e.g., "1s", "10m", "2h", "1d", "1y")
 			// Only try this if the token contains letters (indicating a unit suffix)
 			if containsLetters(token) {
-				if bytes, err := humanize.ParseBytes(token); err == nil {
+				if seconds, err := parseTimeDuration(token); err == nil {
+					result.WriteString(fmt.Sprintf("%d", seconds))
+					continue
+				}
+			}
+
+			// Try to parse as humanized byte size (e.g., "10GB", "1.5MB", "10KB", "1KiB")
+			// Only try this if the token contains letters (indicating a unit suffix)
+			if containsLetters(token) {
+				if bytes, err := parseByteSize(token); err == nil {
 					result.WriteString(fmt.Sprintf("%d", bytes))
 					continue
 				}
@@ -1453,14 +1460,14 @@ func parseHumanizedNumber(s string) (float64, error) {
 		return 0, fmt.Errorf("empty string")
 	}
 
-	// Check for SI suffixes
+	// Check for SI suffixes (uppercase only to avoid conflicts with time units)
 	suffixes := map[string]float64{
-		"K": 1e3, "k": 1e3,
-		"M": 1e6, "m": 1e6,
-		"G": 1e9, "g": 1e9,
-		"T": 1e12, "t": 1e12,
-		"P": 1e15, "p": 1e15,
-		"E": 1e18, "e": 1e18,
+		"K": 1e3,
+		"M": 1e6,
+		"G": 1e9,
+		"T": 1e12,
+		"P": 1e15,
+		"E": 1e18,
 	}
 
 	for suffix, multiplier := range suffixes {
@@ -1498,4 +1505,99 @@ func parseCommaSeparatedNumber(s string) (int64, error) {
 	}
 
 	return 0, fmt.Errorf("not a valid comma-separated number: %s", s)
+}
+
+// parseTimeDuration parses time duration strings (e.g., "1s", "10m", "2h", "1d", "1y")
+// and returns the duration in seconds
+func parseTimeDuration(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty string")
+	}
+
+	// Time unit suffixes and their conversion to seconds
+	timeUnits := map[string]int64{
+		"s": 1,        // seconds
+		"m": 60,       // minutes
+		"h": 3600,     // hours
+		"d": 86400,    // days
+		"w": 604800,   // weeks
+		"y": 31536000, // years (365 days)
+	}
+
+	// Check for time unit suffixes
+	for suffix, multiplier := range timeUnits {
+		if strings.HasSuffix(s, suffix) {
+			numStr := strings.TrimSuffix(s, suffix)
+			if num, err := strconv.ParseFloat(numStr, 64); err == nil {
+				return int64(num * float64(multiplier)), nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("not a valid time duration: %s", s)
+}
+
+// parseByteSize parses byte size strings with proper byte unit distinction
+// Supports both decimal (KB, MB, GB, TB, PB, EB) and binary (KiB, MiB, GiB, TiB, PiB, EiB) units
+func parseByteSize(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty string")
+	}
+
+	// Binary units (base 1024)
+	binaryUnits := map[string]int64{
+		"B":   1,
+		"KiB": 1024,
+		"MiB": 1024 * 1024,
+		"GiB": 1024 * 1024 * 1024,
+		"TiB": 1024 * 1024 * 1024 * 1024,
+		"PiB": 1024 * 1024 * 1024 * 1024 * 1024,
+		"EiB": 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
+	}
+
+	// Decimal units (base 1000)
+	decimalUnits := map[string]int64{
+		"KB": 1000,
+		"MB": 1000 * 1000,
+		"GB": 1000 * 1000 * 1000,
+		"TB": 1000 * 1000 * 1000 * 1000,
+		"PB": 1000 * 1000 * 1000 * 1000 * 1000,
+		"EB": 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
+	}
+
+	// Check for binary units first (they have 'i' in them)
+	for suffix, multiplier := range binaryUnits {
+		if strings.HasSuffix(s, suffix) {
+			numStr := strings.TrimSuffix(s, suffix)
+			if num, err := strconv.ParseFloat(numStr, 64); err == nil {
+				return int64(num * float64(multiplier)), nil
+			}
+		}
+	}
+
+	// Check for decimal units
+	for suffix, multiplier := range decimalUnits {
+		if strings.HasSuffix(s, suffix) {
+			numStr := strings.TrimSuffix(s, suffix)
+			if num, err := strconv.ParseFloat(numStr, 64); err == nil {
+				return int64(num * float64(multiplier)), nil
+			}
+		}
+	}
+
+	// Check for standalone 'B' (bytes)
+	if strings.HasSuffix(s, "B") && !strings.HasSuffix(s, "KB") && !strings.HasSuffix(s, "MB") &&
+		!strings.HasSuffix(s, "GB") && !strings.HasSuffix(s, "TB") && !strings.HasSuffix(s, "PB") &&
+		!strings.HasSuffix(s, "EB") && !strings.HasSuffix(s, "KiB") && !strings.HasSuffix(s, "MiB") &&
+		!strings.HasSuffix(s, "GiB") && !strings.HasSuffix(s, "TiB") && !strings.HasSuffix(s, "PiB") &&
+		!strings.HasSuffix(s, "EiB") {
+		numStr := strings.TrimSuffix(s, "B")
+		if num, err := strconv.ParseFloat(numStr, 64); err == nil {
+			return int64(num), nil
+		}
+	}
+
+	return 0, fmt.Errorf("not a valid byte size: %s", s)
 }
