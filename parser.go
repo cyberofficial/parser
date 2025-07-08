@@ -36,6 +36,9 @@ const (
 	NOT      TokenType = "NOT"      // NOT
 	ANY      TokenType = "ANY"      // ANY
 	COMMA    TokenType = "COMMA"    // ,
+	UPPER    TokenType = "UPPER"    // UPPER
+	LOWER    TokenType = "LOWER"    // LOWER
+	EXACT    TokenType = "EXACT"    // EXACT
 )
 
 type Token struct {
@@ -51,6 +54,7 @@ type ComparisonExpression struct {
 	Field    string
 	Operator TokenType
 	Value    string
+	Function TokenType
 }
 
 // AnyExpression represents an ANY operator that checks if any of the provided values match the field
@@ -273,21 +277,39 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 	switch fieldValue.Kind() {
 	case reflect.String:
 		s := fieldValue.Interface().(string)
+		val := ce.Value
+		switch ce.Function {
+		case UPPER:
+			s = strings.ToUpper(s)
+			val = strings.ToUpper(val)
+		case LOWER:
+			s = strings.ToLower(s)
+			val = strings.ToLower(val)
+		case EXACT:
+			// No change, direct comparison
+		default:
+			// Default behavior is case-insensitive for EQ, NE, CONTAINS
+			if ce.Operator == EQ || ce.Operator == NE || ce.Operator == CONTAINS {
+				s = strings.ToLower(s)
+				val = strings.ToLower(val)
+			}
+		}
+
 		switch ce.Operator {
 		case EQ:
-			return s == ce.Value, nil
+			return s == val, nil
 		case NE:
-			return s != ce.Value, nil
+			return s != val, nil
 		case LT:
-			return s < ce.Value, nil
+			return s < val, nil
 		case GT:
-			return s > ce.Value, nil
+			return s > val, nil
 		case LE:
-			return s <= ce.Value, nil
+			return s <= val, nil
 		case GE:
-			return s >= ce.Value, nil
+			return s >= val, nil
 		case CONTAINS:
-			return strings.Contains(s, ce.Value), nil
+			return strings.Contains(s, val), nil
 		}
 	case reflect.Bool:
 		b, _ := strconv.ParseBool(ce.Value)
@@ -367,7 +389,8 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 		if fieldValue.IsNil() {
 			return false, nil
 		}
-		if ce.Operator == CONTAINS {
+		switch ce.Operator {
+		case CONTAINS:
 			for i := 0; i < fieldValue.Len(); i++ {
 				item := fieldValue.Index(i)
 				if item.Kind() == reflect.Ptr && !item.IsNil() {
@@ -384,7 +407,7 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 				}
 			}
 			return false, nil
-		} else if ce.Operator == EQ {
+		case EQ:
 			for i := 0; i < fieldValue.Len(); i++ {
 				item := fieldValue.Index(i)
 				if item.Kind() == reflect.Ptr && !item.IsNil() {
@@ -401,7 +424,7 @@ func (ce *ComparisonExpression) compareValue(fieldValue reflect.Value) (bool, er
 				}
 			}
 			return false, nil
-		} else if ce.Operator == NE {
+		case NE:
 			for i := 0; i < fieldValue.Len(); i++ {
 				item := fieldValue.Index(i)
 				if item.Kind() == reflect.Ptr && !item.IsNil() {
@@ -503,10 +526,7 @@ func (ce *ConjunctionExpression) Evaluate(item reflect.Value) (bool, error) {
 		}
 		match, err := expr.Evaluate(item)
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				return false, err
-			}
-			return false, nil
+			return false, err
 		}
 		if !match {
 			return false, nil
@@ -1059,9 +1079,36 @@ func (p *Parser) parsePrimary() Expression {
 		}
 	}
 
-	if p.currentTokenIs(IDENTIFIER) {
-		field := p.currentToken.Literal
-		p.nextToken()
+	if p.currentTokenIs(IDENTIFIER) || p.currentTokenIs(UPPER) || p.currentTokenIs(LOWER) || p.currentTokenIs(EXACT) {
+		var function TokenType
+		var field string
+
+		if p.currentTokenIs(UPPER) || p.currentTokenIs(LOWER) || p.currentTokenIs(EXACT) {
+			function = p.currentToken.Type
+			p.nextToken() // consume function
+
+			if !p.currentTokenIs(LPAREN) {
+				p.errors = append(p.errors, "expected '(' after function name")
+				return nil
+			}
+			p.nextToken() // consume '('
+
+			if !p.currentTokenIs(IDENTIFIER) {
+				p.errors = append(p.errors, "expected field name in function call")
+				return nil
+			}
+			field = p.currentToken.Literal
+			p.nextToken() // consume field
+
+			if !p.currentTokenIs(RPAREN) {
+				p.errors = append(p.errors, "expected ')' after field name in function call")
+				return nil
+			}
+			p.nextToken() // consume ')'
+		} else {
+			field = p.currentToken.Literal
+			p.nextToken()
+		}
 
 		// Handle IS NULL / IS NOT NULL
 		if p.currentTokenIs(IS) {
@@ -1085,6 +1132,7 @@ func (p *Parser) parsePrimary() Expression {
 			p.errors = append(p.errors, err.Error())
 			return nil
 		}
+		expr.Function = function
 		return expr
 	}
 
@@ -1317,6 +1365,12 @@ func LookupIdentifier(identifier string) TokenType {
 		return NOT
 	case "ANY":
 		return ANY
+	case "UPPER":
+		return UPPER
+	case "LOWER":
+		return LOWER
+	case "EXACT":
+		return EXACT
 	default:
 		return IDENTIFIER
 	}
@@ -1324,6 +1378,22 @@ func LookupIdentifier(identifier string) TokenType {
 
 // Evaluate for NotExpression
 func (ne *NotExpression) Evaluate(item reflect.Value) (bool, error) {
+	// If the inner expression is a comparison, we may need to adjust its behavior
+	if cmp, ok := ne.Expression.(*ComparisonExpression); ok {
+		// When NOT is used with EXACT, we want to ensure the EXACT logic is preserved.
+		if cmp.Function == EXACT {
+			// Temporarily remove the function to force exact comparison, then negate it.
+			originalFunction := cmp.Function
+			cmp.Function = ""
+			result, err := cmp.Evaluate(item)
+			cmp.Function = originalFunction // Restore for other evaluations
+			if err != nil {
+				return false, err
+			}
+			return !result, nil
+		}
+	}
+
 	result, err := ne.Expression.Evaluate(item)
 	if err != nil {
 		return false, err

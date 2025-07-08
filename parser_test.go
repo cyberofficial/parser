@@ -792,3 +792,138 @@ func TestMessageFieldParsing(t *testing.T) {
 		})
 	}
 }
+
+func TestCaseFunctions(t *testing.T) {
+	people := []Person{
+		{Name: "Alice"},
+		{Name: "Bob"},
+		{Name: "kyle"},
+	}
+
+	tests := []struct {
+		name     string
+		query    string
+		expected int
+	}{
+		{"UPPER case match", "UPPER(Name) = 'ALICE'", 1},
+		{"UPPER case no match", "UPPER(Name) = 'alice'", 1},
+		{"LOWER case match", "LOWER(Name) = 'bob'", 1},
+		{"LOWER case no match", "LOWER(Name) = 'BOB'", 1},
+		{"EXACT case match", "EXACT(Name) = 'kyle'", 1},
+		{"EXACT case no match", "EXACT(Name) = 'Kyle'", 0},
+		{"EXACT case no match upper", "EXACT(Name) = 'KYLE'", 0},
+		{"Default case-insensitive match", "Name = 'alice'", 1},
+		{"Default case-insensitive match upper", "Name = 'ALICE'", 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := Parse(tt.query, people)
+			if err != nil {
+				t.Fatalf("Error parsing query '%s': %v", tt.query, err)
+			}
+
+			if len(results) != tt.expected {
+				t.Errorf("Query '%s' returned %d results, expected %d", tt.query, len(results), tt.expected)
+			}
+		})
+	}
+}
+
+func TestAddressAndPhoneQueries(t *testing.T) {
+	type User struct {
+		Name    string
+		City    string
+		Address string
+		Phone   string
+	}
+
+	users := []User{
+		{Name: "Alice", City: "New York", Address: "123 Main St", Phone: "(212) 555-0101"},
+		{Name: "bob", City: "Los Angeles", Address: "456 Oak Ave", Phone: "(213) 555-0102"},
+		{Name: "Charlie", City: "chicago", Address: "789 Pine Ln", Phone: "(312) 555-0103"},
+		{Name: "Kyle", City: "Houston", Address: "123 Main St", Phone: "(713) 555-0104"},
+		{Name: "Diana", City: "New York", Address: "123 Main St", Phone: "(212) 555-0101"},
+		{Name: "Ethan", City: "chicago", Address: "789 Pine Ln", Phone: "(312) 555-0105"},
+		{Name: "Fiona", City: "Miami", Address: "321 Palm Rd", Phone: "(305) 555-0106"},
+	}
+
+	tests := []struct {
+		name     string
+		query    string
+		expected int
+	}{
+		{"Find by address", "Address = '123 Main St'", 3},
+		{"Find by phone number", "Phone = '(212) 555-0101'", 2},
+		{"Find by area code", "Phone CONTAINS '(312)'", 2},
+		{"Find by city and address", "LOWER(City) = 'chicago' AND Address CONTAINS 'Pine'", 2},
+		{"Find by name and area code", "LOWER(Name) = 'bob' AND Phone CONTAINS '(213)'", 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := Parse(tt.query, users)
+			if err != nil {
+				t.Fatalf("Error parsing query '%s': %v", tt.query, err)
+			}
+
+			if len(results) != tt.expected {
+				t.Errorf("Query '%s' returned %d results, expected %d", tt.query, len(results), tt.expected)
+			}
+		})
+	}
+}
+
+func TestComplexUserQueries(t *testing.T) {
+	type User struct {
+		Name    string
+		City    string
+		Address string
+		Phone   string
+		Email   string
+	}
+
+	users := []User{
+		{Name: "Alice", City: "New York", Address: "123 Main St", Phone: "(212) 555-0101", Email: "alice@example.com"},
+		{Name: "bob", City: "Los Angeles", Address: "456 Oak Ave", Phone: "(213) 555-0102", Email: "bob@example.com"},
+		{Name: "Charlie", City: "chicago", Address: "789 Pine Ln", Phone: "(312) 555-0103", Email: "charlie@example.com"},
+		{Name: "Kyle", City: "Houston", Address: "123 Main St", Phone: "(713) 555-0104", Email: "kyle@example.com"},
+		{Name: "Diana", City: "New York", Address: "123 Main St", Phone: "(212) 555-0101", Email: "diana@example.com"},
+		{Name: "Ethan", City: "chicago", Address: "789 Pine Ln", Phone: "(312) 555-0105", Email: "ethan@example.com"},
+		{Name: "Fiona", City: "Miami", Address: "321 Palm Rd", Phone: "(305) 555-0106", Email: "FIONA@example.com"},
+		{Name: "George", City: "New York", Address: "123 Main St", Phone: "(917) 555-0107", Email: "george@example.com"},
+		{Name: "Hannah", City: "Los Angeles", Address: "456 Oak Ave", Phone: "(323) 555-0108", Email: "HANNAH@example.com"},
+	}
+
+	tests := []struct {
+		name     string
+		query    string
+		expected int
+	}{
+		{"Default case-insensitive search", "Name = 'alice'", 1},
+		{"Default case-insensitive search upper", "Name = 'ALICE'", 1},
+		{"UPPER function", "UPPER(Name) = 'BOB'", 1},
+		{"LOWER function on email", "LOWER(Email) = 'fiona@example.com'", 1},
+		{"EXACT function for case-sensitive matching", "EXACT(Name) = 'Kyle'", 1},
+		{"EXACT function no match", "EXACT(Name) = 'kyle'", 0},
+		{"EXACT function on email", "EXACT(Email) = 'HANNAH@example.com'", 1},
+		{"Mixed operations with AND, OR, NOT", "LOWER(City) = 'new york' AND Address CONTAINS 'Main'", 3},
+		{"Mixed exclusionary search", "Address = '123 Main St' AND NOT EXACT(Name) = 'Kyle'", 3},
+		{"Search by area code", "Phone CONTAINS '(917)'", 1},
+		{"Find users with shared phone number, excluding one", "Phone = '(212) 555-0101' AND Name != 'Alice'", 1},
+		{"Complex exclusionary search", "Address = '456 Oak Ave' AND NOT (LOWER(Name) = 'bob' OR Email CONTAINS 'HANNAH')", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := Parse(tt.query, users)
+			if err != nil {
+				t.Fatalf("Error parsing query '%s': %v", tt.query, err)
+			}
+
+			if len(results) != tt.expected {
+				t.Errorf("Query '%s' returned %d results, expected %d", tt.query, len(results), tt.expected)
+			}
+		})
+	}
+}
